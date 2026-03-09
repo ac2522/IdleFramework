@@ -144,6 +144,48 @@ class TestSecurity:
         assert evaluate_formula(expr, {"x": 8}) == pytest.approx(3.0)
 
 
+class TestExponentDoS:
+    def test_huge_literal_exponent_rejected(self):
+        """Exponents beyond safe limit should raise."""
+        expr = compile_formula("2 ** 999999999")
+        with pytest.raises(ValueError, match="[Ee]xponent"):
+            evaluate_formula(expr)
+
+    def test_chained_exponent_rejected(self):
+        """Nested exponentiation with large result should raise."""
+        expr = compile_formula("2 ** (2 ** 64)")
+        with pytest.raises(ValueError, match="[Ee]xponent"):
+            evaluate_formula(expr)
+
+    def test_normal_exponent_allowed(self):
+        """Reasonable exponents should work fine."""
+        expr = compile_formula("2 ** 10")
+        assert evaluate_formula(expr) == pytest.approx(1024.0)
+
+
+class TestBuiltinShadowing:
+    def test_variable_shadows_builtin_raises(self):
+        expr = compile_formula("sqrt + 1")
+        with pytest.raises(ValueError, match="conflict"):
+            evaluate_formula(expr, {"sqrt": 5.0})
+
+    def test_non_conflicting_variable_ok(self):
+        expr = compile_formula("x + 1")
+        assert evaluate_formula(expr, {"x": 5.0}) == pytest.approx(6.0)
+
+
+class TestZeroArgFunctions:
+    def test_sum_no_args(self):
+        # sum() returns 0
+        expr = compile_formula("sum()")
+        assert evaluate_formula(expr) == pytest.approx(0.0)
+
+    def test_prod_no_args(self):
+        # prod() returns 1
+        expr = compile_formula("prod()")
+        assert evaluate_formula(expr) == pytest.approx(1.0)
+
+
 class TestPrestigeFormulas:
     """Real-world formulas from actual games."""
 

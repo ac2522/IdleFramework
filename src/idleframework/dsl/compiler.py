@@ -48,8 +48,8 @@ _SAFE_BUILTINS: dict[str, Any] = {
     "ceil": math.ceil,
     "clamp": lambda val, lo, hi: max(lo, min(val, hi)),
     "round": round,
-    "sum": sum,
-    "prod": math.prod,
+    "sum": lambda *args: sum(args) if args else 0,
+    "prod": lambda *args: math.prod(args) if args else 1,
     "True": True,
     "False": False,
 }
