@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/model/nodes.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1.0, 'achievement', 'additive', 'and', 'automatic', 'choice_group', 'collect', 'collection', 'compound', 'converter', 'deterministic', 'end_condition', 'gate', 'generator', 'interactive', 'manager', 'multi_threshold', 'multiplicative', 'nested_generator', 'passive', 'percentage', 'prestige_layer', 'probabilistic', 'probability', 'pull_all', 'pull_any', 'queue', 'register', 'resource', 'sacrifice', 'single_threshold', 'toggle', 'type', 'unlock_gate', 'upgrade']
