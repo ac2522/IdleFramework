@@ -19,7 +19,7 @@ from idleframework.engine.solvers import (
     efficiency_score,
     time_to_afford,
 )
-from idleframework.model.nodes import Generator, Upgrade
+from idleframework.model.nodes import Generator, Resource, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -166,16 +166,18 @@ class PiecewiseEngine:
         """Find the most efficient next purchase and when it's affordable.
 
         Evaluates all purchasable generators and upgrades. For each, computes
-        cost and time-to-afford at current production rates. Returns the most
-        efficient (best delta_production/cost) candidate.
+        cost and time-to-afford at the production rate of the specific currency
+        required. Returns the most efficient (best delta_production/cost).
 
         Returns (node_id, time_from_now) or None if nothing is purchasable.
         """
         rates = self.compute_production_rates()
-        total_rate = sum(rates.values())
 
-        if total_rate <= 0:
+        if not rates or all(r <= 0 for r in rates.values()):
             return None
+
+        # Compute generator multipliers once to avoid repeated recomputation
+        gen_multipliers = self._compute_generator_multipliers()
 
         candidates: list[tuple[str, float, float]] = []  # (node_id, time, efficiency)
 
@@ -191,14 +193,20 @@ class PiecewiseEngine:
                 cost = float(cost_bf)
                 current_balance = self._get_currency_for(node.id)
 
+                # Use the production rate of the specific currency this costs
+                currency_id = self._get_currency_resource_id_for(node.id)
+                currency_rate = rates.get(currency_id, 0.0) if currency_id else 0.0
+
                 if current_balance >= cost:
                     time_needed = 0.0
+                elif currency_rate <= 0:
+                    continue  # Can never afford this
                 else:
                     remaining = cost - current_balance
-                    time_needed = remaining / total_rate
+                    time_needed = remaining / currency_rate
 
                 # Efficiency: what does buying 1 more generator add?
-                gen_mult = self._compute_generator_multipliers().get(node.id, 1.0)
+                gen_mult = gen_multipliers.get(node.id, 1.0)
                 delta_prod = node.base_production / node.cycle_time * gen_mult
                 eff = delta_prod / cost if cost > 0 else float("inf")
 
@@ -212,14 +220,20 @@ class PiecewiseEngine:
                 cost = node.cost
                 current_balance = self._get_currency_for(node.id)
 
+                # Use the production rate of the specific currency
+                currency_id = self._get_currency_resource_id_for(node.id)
+                currency_rate = rates.get(currency_id, 0.0) if currency_id else 0.0
+
                 if current_balance >= cost:
                     time_needed = 0.0
+                elif currency_rate <= 0:
+                    continue  # Can never afford this
                 else:
                     remaining = cost - current_balance
-                    time_needed = remaining / total_rate
+                    time_needed = remaining / currency_rate
 
                 # Efficiency: estimate production gain from the upgrade
-                delta_prod = self._estimate_upgrade_delta(node)
+                delta_prod = self._estimate_upgrade_delta(node, gen_multipliers)
                 eff = delta_prod / cost if cost > 0 else float("inf")
 
                 candidates.append((node.id, time_needed, eff))
@@ -234,49 +248,78 @@ class PiecewiseEngine:
             return (best[0], 0.0)
 
         # Otherwise pick the one with best efficiency among all
-        # Use efficiency as primary sort, but also consider time
         best = max(candidates, key=lambda x: x[2])
         return (best[0], best[1])
 
     def _get_currency_for(self, node_id: str) -> float:
         """Get the current balance of the currency used to buy a node.
 
-        For now, assumes all purchases use the first resource (typically 'cash').
+        Looks up the resource that the node's generator produces to (via
+        production_target edges). For upgrades, uses the target generator's
+        currency. Falls back to the first resource if no edge found.
         """
-        # Find the first resource node
-        from idleframework.model.nodes import Resource
-
-        for node in self._game.nodes:
-            if isinstance(node, Resource):
-                return self._state.get(node.id).current_value
+        currency_id = self._get_currency_resource_id_for(node_id)
+        if currency_id:
+            return self._state.get(currency_id).current_value
         return 0.0
 
-    def _get_currency_resource_id(self) -> str | None:
-        """Get the ID of the primary currency resource."""
-        from idleframework.model.nodes import Resource
+    def _get_currency_resource_id_for(self, node_id: str) -> str | None:
+        """Get the resource ID used to purchase a given node.
 
+        For generators: follows production_target edges from the generator to
+        find which resource it produces (and therefore costs).
+        For upgrades: looks up the target generator's currency, or falls back
+        to the first resource for _all upgrades.
+        """
+        node = self._game.get_node(node_id)
+
+        if isinstance(node, Generator):
+            # Generator's currency is the resource it produces to
+            for edge in self._game.get_edges_from(node_id):
+                if edge.edge_type == "production_target":
+                    return edge.target
+            return self._get_primary_resource_id()
+
+        if isinstance(node, Upgrade):
+            if node.target == "_all":
+                return self._get_primary_resource_id()
+            # Use the same currency as the target generator
+            return self._get_currency_resource_id_for(node.target)
+
+        return self._get_primary_resource_id()
+
+    def _get_primary_resource_id(self) -> str | None:
+        """Get the ID of the first resource node (fallback currency)."""
         for node in self._game.nodes:
             if isinstance(node, Resource):
                 return node.id
         return None
 
-    def _estimate_upgrade_delta(self, upgrade: Upgrade) -> float:
-        """Estimate production gain from purchasing an upgrade."""
+    def _estimate_upgrade_delta(
+        self,
+        upgrade: Upgrade,
+        gen_multipliers: dict[str, float] | None = None,
+    ) -> float:
+        """Estimate production gain from purchasing an upgrade.
+
+        Args:
+            upgrade: The upgrade to evaluate.
+            gen_multipliers: Pre-computed generator multipliers (optional).
+        """
+        if gen_multipliers is None:
+            gen_multipliers = self._compute_generator_multipliers()
         rates = self.compute_production_rates()
 
         if upgrade.target == "_all":
-            # Multiplies all production
             current_total = sum(rates.values())
             return current_total * (upgrade.magnitude - 1)
         else:
-            # Multiplies specific generator's contribution
-            # Find that generator's contribution to total rate
             node = self._game.get_node(upgrade.target)
             if isinstance(node, Generator):
                 ns = self._state.get(node.id)
                 if ns.owned <= 0:
                     return 0.0
-                gen_mult = self._compute_generator_multipliers().get(node.id, 1.0)
+                gen_mult = gen_multipliers.get(node.id, 1.0)
                 gen_rate = node.base_production * ns.owned / node.cycle_time * gen_mult
                 return gen_rate * (upgrade.magnitude - 1)
         return 0.0
@@ -284,10 +327,13 @@ class PiecewiseEngine:
     # -- Purchases -----------------------------------------------------------
 
     def purchase(self, node_id: str) -> None:
-        """Execute a purchase: deduct cost, update owned/purchased."""
+        """Execute a purchase: deduct cost, update owned/purchased.
+
+        Raises ValueError if the currency balance is insufficient.
+        """
         node = self._game.get_node(node_id)
         ns = self._state.get(node_id)
-        currency_id = self._get_currency_resource_id()
+        currency_id = self._get_currency_resource_id_for(node_id)
 
         if isinstance(node, Generator):
             cost_bf = bulk_purchase_cost(
@@ -298,12 +344,24 @@ class PiecewiseEngine:
             )
             cost = float(cost_bf)
             if currency_id:
+                balance = self._state.get(currency_id).current_value
+                if balance < cost - 1e-9:
+                    raise ValueError(
+                        f"Insufficient balance to purchase {node_id!r}: "
+                        f"need {cost:.2f}, have {balance:.2f}"
+                    )
                 self._state.get(currency_id).current_value -= cost
             ns.owned += 1
 
         elif isinstance(node, Upgrade):
             cost = node.cost
-            if currency_id:
+            if currency_id and cost > 0:
+                balance = self._state.get(currency_id).current_value
+                if balance < cost - 1e-9:
+                    raise ValueError(
+                        f"Insufficient balance to purchase {node_id!r}: "
+                        f"need {cost:.2f}, have {balance:.2f}"
+                    )
                 self._state.get(currency_id).current_value -= cost
             ns.purchased = True
 
@@ -314,7 +372,7 @@ class PiecewiseEngine:
         """
         threshold = self._game.free_purchase_threshold
         purchased: list[str] = []
-        currency_id = self._get_currency_resource_id()
+        currency_id = self._get_primary_resource_id()
         if currency_id is None:
             return purchased
 
@@ -382,7 +440,6 @@ class PiecewiseEngine:
             self.apply_free_purchases()
 
             rates = self.compute_production_rates()
-            total_rate = sum(rates.values())
 
             # Find next purchase
             next_purchase = self.find_next_purchase()
@@ -434,12 +491,12 @@ class PiecewiseEngine:
                     node_id, time_needed = next_purchase
                     if time_needed > epsilon:
                         break
-                    # Another purchase within epsilon — continue loop
+                    # Another purchase within epsilon -- continue loop
                     if self._time + time_needed > window_start + epsilon:
                         break
 
             else:
-                # No purchase before target_time — advance to target
+                # No purchase before target_time -- advance to target
                 dt = target_time - self._time
                 seg = self._create_segment(rates, dt, [])
                 new_segments.append(seg)
@@ -454,7 +511,6 @@ class PiecewiseEngine:
         self, rates: dict[str, float], duration: float, events: list[str]
     ) -> Segment:
         """Create a Segment record."""
-        # Compute overall multiplier from stacking groups
         bonuses = collect_stacking_bonuses(self._game, self._state)
         mult = compute_final_multiplier(bonuses)
 
@@ -486,7 +542,7 @@ class PiecewiseEngine:
 
         Used when chattering is detected to break out of the purchase loop.
         """
-        currency_id = self._get_currency_resource_id()
+        currency_id = self._get_primary_resource_id()
         if currency_id is None:
             return
 

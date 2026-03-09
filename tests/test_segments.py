@@ -18,7 +18,7 @@ from idleframework.engine.events import (
 from idleframework.engine.segments import PiecewiseEngine, Segment
 from idleframework.model.game import GameDefinition
 from idleframework.model.state import GameState, NodeState
-from tests.simulator import simulate_constant_production
+from simulator import simulate_constant_production
 
 
 # ---------------------------------------------------------------------------
@@ -259,26 +259,35 @@ class TestStaleEventRecomputation:
         )
         state = GameState.from_game(game)
         state.node_states["lemonade"].owned = 1
+        # Start with 0 cash — everything requires waiting
+        state.node_states["cash"].current_value = 0.0
 
         engine = PiecewiseEngine(game, state)
 
-        # First next purchase candidate
+        # Rates before: 1 lemonade * 1.0/sec = 1.0/sec for cash
+        rates_before = engine.compute_production_rates()
+        assert rates_before["cash"] == pytest.approx(1.0)
+
+        # Lemonade cost = 4*1.07^1 ≈ 4.28, time = 4.28/1.0 = 4.28s
+        # Newspaper cost = 60, time = 60/1.0 = 60s
+        # Greedy picks by efficiency, but let's capture the state
         first_candidate = engine.find_next_purchase()
         assert first_candidate is not None
-        node_id, time_needed = first_candidate
+        first_id, first_time = first_candidate
 
-        # Buy a lemonade manually (deducting cost)
+        # Give enough cash and buy lemonade to change production
+        engine._state.get("cash").current_value = 10.0
         engine.purchase("lemonade")
 
-        # Now recompute — rates changed (2 lemonades now), next purchase time should differ
+        # Now 2 lemonades → 2.0/sec, cash ≈ 5.72
+        # Next purchase times should differ from before
         second_candidate = engine.find_next_purchase()
         assert second_candidate is not None
-        _, second_time = second_candidate
-        # After buying, production is higher, so next purchase should be faster
-        # (if same target) or different target may now be better
-        # Key: we just assert it was recomputed (different time or target)
-        # The time should be different or the target should be different
-        assert second_time != first_candidate[1] or second_candidate[0] != first_candidate[0]
+        second_id, second_time = second_candidate
+
+        # Key assertion: after purchase, candidates are recomputed
+        # Either the target changed, or the time changed
+        assert (second_id, second_time) != (first_id, first_time)
 
 
 # ---------------------------------------------------------------------------
