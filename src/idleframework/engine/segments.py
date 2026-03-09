@@ -18,6 +18,8 @@ import math
 
 from idleframework.model.game import GameDefinition
 from idleframework.model.stacking import compute_final_multiplier
+from idleframework.graph.validation import validate_graph
+from idleframework.dsl.compiler import compile_formula, evaluate_formula
 from idleframework.engine.solvers import bulk_cost, time_to_afford
 from idleframework.engine.events import PurchaseEvent
 
@@ -25,9 +27,14 @@ from idleframework.engine.events import PurchaseEvent
 class PiecewiseEngine:
     """Core simulation engine using piecewise-constant analytical segments."""
 
-    def __init__(self, game: GameDefinition):
+    def __init__(self, game: GameDefinition, validate: bool = False):
         self._game = game
         self._time = 0.0
+
+        if validate:
+            errors = validate_graph(game)
+            if errors:
+                raise ValueError(f"Validation errors: {'; '.join(errors)}")
 
         # State: owned counts per generator
         self._owned: dict[str, int] = {}
@@ -260,6 +267,22 @@ class PiecewiseEngine:
         # Advance remaining time
         self.advance_to(target_time)
         return purchases
+
+    def evaluate_prestige(self, prestige_id: str, **variables: float) -> float:
+        """Evaluate a prestige layer's formula with given variables."""
+        node = self._nodes.get(prestige_id)
+        if node is None or node.type != "prestige_layer":
+            raise ValueError(f"Unknown prestige layer: {prestige_id}")
+        formula = compile_formula(node.formula_expr)
+        return evaluate_formula(formula, variables)
+
+    def evaluate_register(self, register_id: str, variables: dict[str, float]) -> float:
+        """Evaluate a register node's formula with given variables."""
+        node = self._nodes.get(register_id)
+        if node is None or node.type != "register":
+            raise ValueError(f"Unknown register: {register_id}")
+        formula = compile_formula(node.formula_expr)
+        return evaluate_formula(formula, variables)
 
     def _find_payment_resource(self) -> str:
         """Find the primary payment resource (first resource in game)."""
