@@ -15,18 +15,27 @@ from lark import Token, Tree
 from idleframework.dsl.parser import parse_formula as _parse
 
 MAX_DEPTH = 50
+MAX_EXPONENT_VALUE = 1e6  # Prevent astronomical exponents (DoS protection)
 
 # Whitelisted AST node types
 _ALLOWED_NODES = frozenset({
     ast.Expression, ast.BinOp, ast.UnaryOp, ast.Call, ast.Name,
     ast.Constant, ast.Compare, ast.IfExp, ast.Load,
     # Operator nodes
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow, ast.USub,
+    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.USub,
     ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq,
 })
 
+def _safe_pow(base: float, exp: float) -> float:
+    """Exponentiation with DoS protection against huge exponents."""
+    if isinstance(exp, (int, float)) and abs(exp) > MAX_EXPONENT_VALUE:
+        raise ValueError(f"Exponent {exp} exceeds safe limit ({MAX_EXPONENT_VALUE})")
+    return base ** exp
+
+
 # Safe builtins for evaluation
 _SAFE_BUILTINS: dict[str, Any] = {
+    "_safe_pow": _safe_pow,
     "sqrt": math.sqrt,
     "cbrt": lambda x: math.copysign(abs(x) ** (1 / 3), x),
     "log": math.log,
@@ -75,6 +84,9 @@ def evaluate_formula(formula: CompiledFormula, variables: dict[str, float] | Non
     """Evaluate a compiled formula with given variable bindings."""
     ns = dict(_SAFE_BUILTINS)
     if variables:
+        conflicts = set(variables) & set(_SAFE_BUILTINS)
+        if conflicts:
+            raise ValueError(f"Variable names conflict with builtins: {conflicts}")
         ns.update(variables)
     return eval(formula._code, {"__builtins__": {}}, ns)
 
@@ -118,10 +130,20 @@ def _tree_to_ast(tree: Tree | Token, depth: int) -> ast.expr:
     if tree.data == "neg":
         return ast.UnaryOp(op=ast.USub(), operand=_tree_to_ast(tree.children[0], d))
 
+    # Power operator — rewritten to _safe_pow() call for DoS protection
+    if tree.data == "pow":
+        left = _tree_to_ast(tree.children[0], d)
+        right = _tree_to_ast(tree.children[1], d)
+        return ast.Call(
+            func=ast.Name(id="_safe_pow", ctx=ast.Load()),
+            args=[left, right],
+            keywords=[],
+        )
+
     # Binary operators
     _binops = {
         "add": ast.Add, "sub": ast.Sub, "mul": ast.Mult,
-        "div": ast.Div, "mod": ast.Mod, "pow": ast.Pow,
+        "div": ast.Div, "mod": ast.Mod,
     }
     if tree.data in _binops:
         return ast.BinOp(
@@ -146,8 +168,11 @@ def _tree_to_ast(tree: Tree | Token, depth: int) -> ast.expr:
         func_name = str(tree.children[0])
         if func_name.startswith("__"):
             raise ValueError(f"Dunder function names forbidden: {func_name}")
-        args_tree = tree.children[1]
-        args = [_tree_to_ast(c, d) for c in args_tree.children]
+        if len(tree.children) > 1:
+            args_tree = tree.children[1]
+            args = [_tree_to_ast(c, d) for c in args_tree.children]
+        else:
+            args = []
 
         # Special handling for if() and piecewise()
         if func_name == "if" and len(args) == 3:

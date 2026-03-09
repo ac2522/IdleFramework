@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/bigfloat.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1e-10, 1.0, 10.0, -324, 308, '0', '0 ** non-positive', 'B', 'Billion', 'DDc', 'Dc', 'Decillion', 'Duodecillion', 'K', 'M', 'Million', 'No', 'Nonillion', 'Oc', 'Octillion', 'Qa', 'Qi', 'Quadrillion', 'Quintillion', 'Septillion', 'Sextillion', 'Sp', 'Sx', 'T', 'TDc', 'Thousand', 'Tredecillion', 'Trillion', 'UDc', 'Undecillion', 'engineering', 'exponent', 'mantissa', 'named', 'scientific']

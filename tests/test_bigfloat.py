@@ -137,6 +137,31 @@ class TestPowLog:
         with pytest.raises(ValueError):
             BigFloat(0).log10()
 
+    def test_pow_zero_returns_one(self):
+        assert float(BigFloat(5) ** 0) == pytest.approx(1.0)
+
+    def test_pow_negative_even(self):
+        result = BigFloat(-3) ** 2
+        assert float(result) == pytest.approx(9.0)
+
+    def test_pow_negative_odd(self):
+        result = BigFloat(-3) ** 3
+        assert float(result) == pytest.approx(-27.0)
+
+    def test_pow_negative_float_even(self):
+        """Float-typed integer power: (-3)^2.0 = 9"""
+        result = BigFloat(-3) ** 2.0
+        assert float(result) == pytest.approx(9.0)
+
+    def test_pow_negative_float_odd(self):
+        """Float-typed integer power: (-3)^3.0 = -27"""
+        result = BigFloat(-3) ** 3.0
+        assert float(result) == pytest.approx(-27.0)
+
+    def test_pow_negative_non_integer_raises(self):
+        with pytest.raises(ValueError):
+            BigFloat(-8) ** 0.5
+
 
 class TestComparison:
     def test_lt(self):
@@ -154,6 +179,18 @@ class TestComparison:
         assert BigFloat(-10) < BigFloat(-1)
         assert BigFloat(-1) < BigFloat(0)
         assert BigFloat(0) < BigFloat(1)
+
+    def test_zero_lt_small_positive(self):
+        assert BigFloat(0) < BigFloat(0.5)
+
+    def test_zero_lt_tiny_positive(self):
+        assert BigFloat(0) < BigFloat(1e-300)
+
+    def test_zero_gt_negative(self):
+        assert BigFloat(0) > BigFloat(-1)
+
+    def test_zero_not_lt_zero(self):
+        assert not (BigFloat(0) < BigFloat(0))
 
 
 class TestConversion:

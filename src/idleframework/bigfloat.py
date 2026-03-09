@@ -153,13 +153,16 @@ class BigFloat:
                 return BigFloat(0)
             raise ZeroDivisionError("0 ** non-positive")
         if isinstance(power, (int, float)):
-            # log10(self) * power = (log10(mantissa) + exponent) * power
             neg = self.mantissa < 0
+            if neg:
+                is_int_power = isinstance(power, int) or (isinstance(power, float) and power == int(power))
+                if not is_int_power:
+                    raise ValueError(f"Cannot raise negative BigFloat to non-integer power {power}")
             abs_m = abs(self.mantissa)
             log_val = (math.log10(abs_m) + self.exponent) * power
             new_exp = math.floor(log_val)
             new_mant = 10.0 ** (log_val - new_exp)
-            if neg and isinstance(power, int) and power % 2 == 1:
+            if neg and int(power) % 2 == 1:
                 new_mant = -new_mant
             return BigFloat.from_components(new_mant, int(new_exp))
         return NotImplemented
@@ -181,6 +184,12 @@ class BigFloat:
 
     def __lt__(self, other) -> bool:
         other = _coerce(other)
+        if self.is_zero and other.is_zero:
+            return False
+        if self.is_zero:
+            return other.mantissa > 0
+        if other.is_zero:
+            return self.mantissa < 0
         if self.mantissa >= 0 and other.mantissa < 0:
             return False
         if self.mantissa < 0 and other.mantissa >= 0:

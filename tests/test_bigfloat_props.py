@@ -16,6 +16,9 @@ exponents = integers(min_value=-10**6, max_value=10**6)
 
 @composite
 def bigfloats(draw, positive=False):
+    # 10% chance of zero
+    if not positive and draw(floats(min_value=0, max_value=1)) < 0.1:
+        return BigFloat(0)
     m = draw(mantissas)
     e = draw(exponents)
     if not positive:
