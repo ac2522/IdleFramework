@@ -11,7 +11,7 @@ from idleframework.model.game import GameDefinition
 from idleframework.model.nodes import Generator, Upgrade
 from idleframework.model.state import GameState
 
-from tests.simulator import rk4_step, simulate_constant_production, simulate_with_events
+from simulator import rk4_step, simulate_constant_production, simulate_with_events
 
 
 # ---------- RK4 Core Tests ----------
