@@ -3,10 +3,21 @@
 Advances game state through analytical segments. Between purchases,
 production is constant so accumulation is linear (rate * dt).
 Each purchase creates a new segment with updated production rates.
+
+Production rate for a generator:
+  effective_rate = count * base_production / cycle_time * multiplier(gen_id)
+
+Multiplier is computed from stacking groups:
+  For each stacking group, collect bonuses from owned upgrades targeting
+  this generator (or _all). Compute per-group multiplier, then multiply
+  all groups together.
 """
 from __future__ import annotations
 
+import math
+
 from idleframework.model.game import GameDefinition
+from idleframework.model.stacking import compute_final_multiplier
 from idleframework.engine.solvers import bulk_cost, time_to_afford
 from idleframework.engine.events import PurchaseEvent
 
@@ -18,21 +29,27 @@ class PiecewiseEngine:
         self._game = game
         self._time = 0.0
 
-        # State: owned counts per generator/upgrade
+        # State: owned counts per generator
         self._owned: dict[str, int] = {}
+        # State: purchased upgrades (boolean — each can only be bought once)
+        self._upgrades_owned: dict[str, bool] = {}
         # State: resource balances
         self._balances: dict[str, float] = {}
 
         # Build lookup maps
         self._nodes = {n.id: n for n in game.nodes}
-        self._generators: dict[str, object] = {}
-        self._resources: dict[str, object] = {}
+        self._generators = {}
+        self._upgrades = {}
+        self._resources = {}
         self._production_edges: dict[str, str] = {}  # generator_id -> resource_id
 
         for node in game.nodes:
             if node.type == "generator":
                 self._generators[node.id] = node
                 self._owned[node.id] = 0
+            elif node.type == "upgrade":
+                self._upgrades[node.id] = node
+                self._upgrades_owned[node.id] = False
             elif node.type == "resource":
                 self._resources[node.id] = node
                 self._balances[node.id] = node.initial_value
@@ -57,6 +74,35 @@ class PiecewiseEngine:
     def set_owned(self, node_id: str, count: int) -> None:
         self._owned[node_id] = count
 
+    def is_upgrade_owned(self, upgrade_id: str) -> bool:
+        return self._upgrades_owned.get(upgrade_id, False)
+
+    def get_generator_multiplier(self, gen_id: str) -> float:
+        """Compute total multiplier for a generator from all owned upgrades.
+
+        Collects bonuses from upgrades targeting this generator or _all,
+        groups them by stacking_group, applies the stacking rule per group,
+        then multiplies all group results together.
+        """
+        # Collect bonuses by stacking group
+        groups: dict[str, dict] = {}
+
+        for upg_id, owned in self._upgrades_owned.items():
+            if not owned:
+                continue
+            upg = self._upgrades[upg_id]
+            if upg.target != gen_id and upg.target != "_all":
+                continue
+
+            group_name = upg.stacking_group
+            if group_name not in groups:
+                rule = self._game.stacking_groups.get(group_name, "multiplicative")
+                groups[group_name] = {"rule": rule, "bonuses": []}
+
+            groups[group_name]["bonuses"].append(upg.magnitude)
+
+        return compute_final_multiplier(groups)
+
     def get_production_rate(self, resource_id: str) -> float:
         """Total production rate for a resource from all generators."""
         total = 0.0
@@ -65,7 +111,8 @@ class PiecewiseEngine:
                 gen = self._generators.get(gen_id)
                 if gen is not None:
                     count = self._owned.get(gen_id, 0)
-                    total += count * gen.base_production / gen.cycle_time
+                    multiplier = self.get_generator_multiplier(gen_id)
+                    total += count * gen.base_production / gen.cycle_time * multiplier
         return total
 
     def advance_to(self, target_time: float) -> None:
@@ -87,7 +134,6 @@ class PiecewiseEngine:
         owned = self._owned.get(node_id, 0)
         cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, owned, count)
 
-        # Find the resource used to pay (first resource in the game)
         pay_resource = self._find_payment_resource()
         balance = self._balances.get(pay_resource, 0.0)
 
@@ -99,6 +145,29 @@ class PiecewiseEngine:
 
         self._balances[pay_resource] -= cost
         self._owned[node_id] = owned + count
+        return cost
+
+    def purchase_upgrade(self, upgrade_id: str) -> float:
+        """Purchase an upgrade. Returns cost paid."""
+        upg = self._upgrades.get(upgrade_id)
+        if upg is None:
+            raise ValueError(f"Unknown upgrade: {upgrade_id}")
+
+        if self._upgrades_owned.get(upgrade_id, False):
+            raise ValueError(f"Already owned: {upgrade_id}")
+
+        cost = upg.cost
+        pay_resource = self._find_payment_resource()
+        balance = self._balances.get(pay_resource, 0.0)
+
+        if balance < cost - 1e-10:
+            raise ValueError(
+                f"Cannot afford upgrade {upgrade_id}: cost={cost:.2f}, "
+                f"balance={balance:.2f}"
+            )
+
+        self._balances[pay_resource] -= cost
+        self._upgrades_owned[upgrade_id] = True
         return cost
 
     def find_next_purchase_event(self, node_id: str) -> PurchaseEvent | None:
