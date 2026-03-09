@@ -59,29 +59,36 @@ def collect_stacking_bonuses(
 
     Returns a dict ready for :func:`compute_final_multiplier`.
     """
-    from idleframework.model.nodes import Upgrade
+    from idleframework.model.nodes import Achievement, Upgrade
 
     result: dict[str, dict[str, object]] = {}
 
-    for node in game.nodes:
-        if not isinstance(node, Upgrade):
-            continue
+    def _add_bonus(sg: str, magnitude: float, node_id: str) -> None:
+        rule = game.stacking_groups.get(sg)
+        if rule is None:
+            raise ValueError(
+                f"Node {node_id!r} references stacking_group {sg!r} "
+                f"which is not defined in game.stacking_groups"
+            )
+        if sg not in result:
+            result[sg] = {"rule": rule, "bonuses": []}
+        result[sg]["bonuses"].append(magnitude)  # type: ignore[union-attr]
 
+    for node in game.nodes:
         node_state = state.get(node.id)
         if not node_state.purchased:
             continue
 
-        sg = node.stacking_group
-        rule = game.stacking_groups.get(sg)
-        if rule is None:
-            raise ValueError(
-                f"Upgrade {node.id!r} references stacking_group {sg!r} "
-                f"which is not defined in game.stacking_groups"
-            )
+        if isinstance(node, Upgrade):
+            count = max(node_state.owned, 1)
+            for _ in range(count):
+                _add_bonus(node.stacking_group, node.magnitude, node.id)
 
-        if sg not in result:
-            result[sg] = {"rule": rule, "bonuses": []}
-
-        result[sg]["bonuses"].append(node.magnitude)  # type: ignore[union-attr]
+        elif isinstance(node, Achievement) and node.bonus is not None:
+            bonus = node.bonus
+            sg = bonus.get("stacking_group")
+            magnitude = bonus.get("magnitude")
+            if sg is not None and magnitude is not None:
+                _add_bonus(sg, magnitude, node.id)
 
     return result

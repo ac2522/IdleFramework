@@ -197,3 +197,58 @@ def test_collect_all_target():
         "cash_mults": {"rule": "multiplicative", "bonuses": [2.0]},
     }
     assert compute_final_multiplier(result) == pytest.approx(2.0)
+
+
+def test_collect_achievement_bonus():
+    """Achievement milestones with a bonus dict should contribute to stacking."""
+    nodes = [
+        {"type": "resource", "id": "cash", "name": "Cash"},
+        {
+            "type": "generator", "id": "gen1", "name": "Gen 1",
+            "base_production": 1.0, "cost_base": 10.0, "cost_growth_rate": 1.07,
+        },
+        {
+            "type": "achievement", "id": "milestone_25",
+            "name": "25 Generators",
+            "condition_type": "single_threshold",
+            "targets": [{"node_id": "gen1", "property": "owned", "threshold": 25}],
+            "bonus": {
+                "type": "multiplicative", "magnitude": 2.0,
+                "target": "gen1", "stacking_group": "milestones",
+            },
+        },
+    ]
+    stacking_groups = {"milestones": "multiplicative"}
+    game = GameDefinition(
+        schema_version="1.0", name="Test", nodes=nodes, edges=[],
+        stacking_groups=stacking_groups,
+    )
+    state = GameState.from_game(game)
+    # Mark achievement as unlocked
+    state.get("milestone_25").purchased = True
+
+    result = collect_stacking_bonuses(game, state)
+    assert "milestones" in result, "Achievement bonus should appear in stacking groups"
+    assert result["milestones"]["bonuses"] == [2.0]
+    assert compute_final_multiplier(result) == pytest.approx(2.0)
+
+
+def test_collect_upgrade_owned_count():
+    """Stackable upgrades should contribute bonus × owned count."""
+    upgrades = [
+        {
+            "type": "upgrade", "id": "u1", "name": "Repeatable Boost",
+            "upgrade_type": "multiplicative", "magnitude": 2.0,
+            "cost": 100, "target": "gen1", "stacking_group": "cash_mults",
+        },
+    ]
+    stacking_groups = {"cash_mults": "multiplicative"}
+    game = _make_game(upgrades, stacking_groups)
+    state = GameState.from_game(game)
+    state.get("u1").purchased = True
+    state.get("u1").owned = 3  # Bought 3 copies
+
+    result = collect_stacking_bonuses(game, state)
+    # Multiplicative: each copy contributes 2.0, so 3 copies = 2.0 * 2.0 * 2.0 = 8.0
+    assert len(result["cash_mults"]["bonuses"]) == 3
+    assert compute_final_multiplier(result) == pytest.approx(8.0)

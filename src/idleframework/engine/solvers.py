@@ -202,36 +202,27 @@ def generator_chain_production(
         rate_product = math.prod(chain_rates)
         return rate_product * (time ** n) / math.factorial(n)
 
-    # With initial counts: each tier i with initial_counts[i] units
-    # contributes to production through the chain below it.
-    # Tier i with count c_i at t=0 contributes:
-    #   c_i * product(rates[0:i]) * t^i / i!
-    # to the bottom tier's accumulated production.
-    # Plus the top-tier generation term.
+    # With initial counts: each tier i with c_i units at t=0 contributes
+    # to the bottom tier's accumulated production by propagating down
+    # through all tiers below and integrating at each level.
+    #
+    # Contribution of c_i at tier i:
+    #   c_i * product(rates[0:i+1]) * t^(i+1) / (i+1)!
+    #
+    # Derivation (2-tier example, rates=[r0, r1], c_1=1):
+    #   dN_0/dt = r1 * c_1  =>  N_0(t) = r1 * c_1 * t
+    #   Production = integral(r0 * N_0(s), 0, t) = r0 * r1 * c_1 * t^2 / 2
 
     total = 0.0
 
-    # Contribution from each tier's initial count propagating down
     for i in range(n):
         if initial_counts[i] == 0:
             continue
-        # Units at tier i propagate down through tiers 0..i-1
-        # Each tier j < i multiplies by rate[j] and integrates over time
-        # Result: initial_counts[i] * product(rates[0:i]) * t^i / i!
-        rate_product_below = math.prod(chain_rates[:i]) if i > 0 else 1.0
+        rate_product = math.prod(chain_rates[: i + 1])
         contribution = (
-            initial_counts[i] * rate_product_below * (time ** i) / math.factorial(i)
+            initial_counts[i] * rate_product * (time ** (i + 1)) / math.factorial(i + 1)
         )
         total += contribution
-
-    # Top-tier generation (1 unit at top generates the chain)
-    # This is already counted if initial_counts includes the top tier.
-    # The standard chain term: product(all rates) * t^n / n!
-    # accounts for the top tier generating into the chain from t=0.
-    # With initial_counts, the top tier's count is already handled above,
-    # so we add the self-generation term only for the full chain depth.
-    rate_product = math.prod(chain_rates)
-    total += rate_product * (time ** n) / math.factorial(n)
 
     return total
 
@@ -351,4 +342,6 @@ def efficiency_score(delta_production: BigFloat, cost: BigFloat) -> float:
     Returns:
         Efficiency as a plain float (for easy comparison/sorting).
     """
+    if cost._is_zero():
+        return float("inf") if not delta_production._is_zero() else 0.0
     return float(delta_production / cost)

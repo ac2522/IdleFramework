@@ -166,21 +166,21 @@ class TestEdgeCompatibility:
         assert errors == []
 
     def test_edge_references_missing_node(self):
-        from idleframework.graph.validation import check_edge_compatibility
+        """Dangling edge references are now caught at construction time."""
+        from pydantic import ValidationError
 
-        game = _make_game(
-            nodes=[Resource(id="gold", name="Gold")],
-            edges=[
-                Edge(
-                    id="e1",
-                    source="nonexistent",
-                    target="gold",
-                    edge_type="resource_flow",
-                ),
-            ],
-        )
-        errors = check_edge_compatibility(game)
-        assert any("nonexistent" in e for e in errors)
+        with pytest.raises(ValidationError, match="nonexistent"):
+            _make_game(
+                nodes=[Resource(id="gold", name="Gold")],
+                edges=[
+                    Edge(
+                        id="e1",
+                        source="nonexistent",
+                        target="gold",
+                        edge_type="resource_flow",
+                    ),
+                ],
+            )
 
     def test_production_target_from_non_generator(self):
         from idleframework.graph.validation import check_edge_compatibility
@@ -204,26 +204,25 @@ class TestEdgeCompatibility:
         assert "production_target" in errors[0]
 
     def test_state_modifier_without_formula(self):
-        from idleframework.graph.validation import check_edge_compatibility
+        """state_modifier without formula is now caught at construction time."""
+        from pydantic import ValidationError
 
-        game = _make_game(
-            nodes=[
-                Resource(id="a", name="A"),
-                Resource(id="b", name="B"),
-            ],
-            edges=[
-                Edge(
-                    id="e1",
-                    source="a",
-                    target="b",
-                    edge_type="state_modifier",
-                    formula=None,
-                ),
-            ],
-        )
-        errors = check_edge_compatibility(game)
-        assert len(errors) == 1
-        assert "formula" in errors[0].lower() or "state_modifier" in errors[0]
+        with pytest.raises(ValidationError, match="formula"):
+            _make_game(
+                nodes=[
+                    Resource(id="a", name="A"),
+                    Resource(id="b", name="B"),
+                ],
+                edges=[
+                    Edge(
+                        id="e1",
+                        source="a",
+                        target="b",
+                        edge_type="state_modifier",
+                        formula=None,
+                    ),
+                ],
+            )
 
     def test_upgrade_target_from_non_upgrade(self):
         from idleframework.graph.validation import check_edge_compatibility
@@ -406,6 +405,7 @@ class TestValidateGraph:
         assert errors == []
 
     def test_multiple_errors_aggregated(self):
+        """validate_graph catches semantic issues on a constructed game."""
         from idleframework.graph.validation import validate_graph
 
         game = _make_game(
@@ -414,20 +414,19 @@ class TestValidateGraph:
                 Resource(id="silver", name="Silver"),
             ],
             edges=[
-                # Edge referencing missing source
+                # production_target from non-generator (semantic issue)
                 Edge(
                     id="e1",
-                    source="nonexistent",
-                    target="gold",
-                    edge_type="resource_flow",
-                ),
-                # state_modifier without formula
-                Edge(
-                    id="e2",
                     source="gold",
                     target="silver",
-                    edge_type="state_modifier",
-                    formula=None,
+                    edge_type="production_target",
+                ),
+                # upgrade_target from non-upgrade (semantic issue)
+                Edge(
+                    id="e2",
+                    source="silver",
+                    target="gold",
+                    edge_type="upgrade_target",
                 ),
             ],
         )

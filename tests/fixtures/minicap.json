@@ -58,7 +58,7 @@
         {"id": "milestone_25_lemon", "type": "achievement",
          "name": "25 Lemonade Stands",
          "condition_type": "single_threshold",
-         "targets": [{"node_id": "lemonade", "property": "count", "threshold": 25}],
+         "targets": [{"node_id": "lemonade", "property": "owned", "threshold": 25}],
          "logic": "and",
          "bonus": {"type": "multiplicative", "magnitude": 2.0, "target": "lemonade", "stacking_group": "milestones"},
          "permanent": true},

@@ -241,6 +241,75 @@ class TestPrestigeFormulas:
 # TestCompiledFormula
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# TestBigFloatVariables
+# ---------------------------------------------------------------------------
+
+class TestBigFloatVariables:
+    """Formulas must work when variables are BigFloat values."""
+
+    def test_sqrt_bigfloat(self):
+        from idleframework.bigfloat import BigFloat
+        result = _eval("sqrt(x)", {"x": BigFloat(16)})
+        assert result == pytest.approx(4.0)
+
+    def test_log10_bigfloat(self):
+        from idleframework.bigfloat import BigFloat
+        result = _eval("log10(x)", {"x": BigFloat(1000)})
+        assert result == pytest.approx(3.0)
+
+    def test_prestige_formula_with_bigfloat(self):
+        """The actual prestige formula from MiniCap must work with BigFloat."""
+        from idleframework.bigfloat import BigFloat
+        result = _eval(
+            "150 * sqrt(lifetime_earnings / 1e15)",
+            {"lifetime_earnings": BigFloat(1e18)},
+        )
+        # 150 * sqrt(1e18 / 1e15) = 150 * sqrt(1000) ≈ 4743.4
+        expected = 150 * math.sqrt(1000.0)
+        assert result == pytest.approx(expected, rel=1e-6)
+
+    def test_floor_bigfloat(self):
+        from idleframework.bigfloat import BigFloat
+        result = _eval("floor(x)", {"x": BigFloat(3.7)})
+        assert result == 3
+
+    def test_abs_bigfloat(self):
+        from idleframework.bigfloat import BigFloat
+        result = _eval("abs(x)", {"x": BigFloat(-5)})
+        assert result == pytest.approx(5.0)
+
+    def test_min_max_bigfloat(self):
+        from idleframework.bigfloat import BigFloat
+        result = _eval("min(a, b)", {"a": BigFloat(10), "b": BigFloat(3)})
+        assert result == pytest.approx(3.0)
+
+    def test_arithmetic_with_bigfloat(self):
+        """BigFloat arithmetic in formulas (no builtin calls) should work via operators."""
+        from idleframework.bigfloat import BigFloat
+        result = _eval("x * 2 + y", {"x": BigFloat(5), "y": BigFloat(3)})
+        # BigFloat arithmetic returns BigFloat, which is fine
+        assert float(result) == pytest.approx(13.0)
+
+    def test_sqrt_large_bigfloat_not_inf(self):
+        """sqrt of BigFloat beyond float range must not return inf."""
+        from idleframework.bigfloat import BigFloat
+        # 1.5e500 overflows float, but sqrt(1.5e500) = sqrt(1.5) * 10^250 is finite
+        bf = BigFloat.from_components(1.5, 500)
+        result = _eval("sqrt(x)", {"x": bf})
+        assert result != float("inf"), "sqrt of large BigFloat must not return inf"
+        assert result == pytest.approx(math.sqrt(1.5) * (10.0 ** 250), rel=1e-6)
+
+    def test_log10_large_bigfloat(self):
+        """log10 of BigFloat beyond float range must return correct result."""
+        from idleframework.bigfloat import BigFloat
+        bf = BigFloat.from_components(2.0, 500)
+        result = _eval("log10(x)", {"x": bf})
+        # log10(2e500) = log10(2) + 500
+        expected = math.log10(2.0) + 500
+        assert result == pytest.approx(expected, rel=1e-9)
+
+
 class TestCompiledFormula:
     def test_has_source(self):
         f = compile_formula("x + 1")

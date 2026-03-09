@@ -6,6 +6,7 @@ import ast
 import math
 from typing import Any
 
+from idleframework.bigfloat import BigFloat
 from idleframework.dsl.parser import parse_formula as _parse
 
 # Maximum tree-to-AST recursion depth
@@ -39,20 +40,55 @@ _ALLOWED_AST_NODES = frozenset({
     ast.NotEq,
 })
 
+def _to_float(x: Any) -> float:
+    """Coerce BigFloat to float for math functions, pass through plain numbers."""
+    return float(x) if isinstance(x, BigFloat) else x
+
+
+def _bf_sqrt(x: Any) -> Any:
+    """BigFloat-aware sqrt: uses log10 decomposition to avoid float overflow."""
+    if isinstance(x, BigFloat):
+        # sqrt(m * 10^e) = sqrt(m) * 10^(e/2)
+        # For odd exponents: sqrt(m * 10) * 10^((e-1)/2)
+        if x.exponent % 2 == 0:
+            return BigFloat.from_components(
+                math.sqrt(x.mantissa), x.exponent // 2
+            )
+        else:
+            return BigFloat.from_components(
+                math.sqrt(x.mantissa * 10.0), (x.exponent - 1) // 2
+            )
+    return math.sqrt(x)
+
+
+def _bf_log10(x: Any) -> float:
+    """BigFloat-aware log10: uses BigFloat.log10() directly."""
+    if isinstance(x, BigFloat):
+        return x.log10()
+    return math.log10(x)
+
+
+def _bf_log(x: Any) -> float:
+    """BigFloat-aware natural log: log(m * 10^e) = ln(m) + e * ln(10)."""
+    if isinstance(x, BigFloat):
+        return math.log(x.mantissa) + x.exponent * math.log(10)
+    return math.log(x)
+
+
 # Safe builtins exposed to formulas
 _SAFE_BUILTINS: dict[str, Any] = {
-    "sqrt": math.sqrt,
+    "sqrt": _bf_sqrt,
     "cbrt": lambda x: x ** (1 / 3) if x >= 0 else -((-x) ** (1 / 3)),
-    "log": math.log,
-    "log10": math.log10,
-    "ln": math.log,
+    "log": _bf_log,
+    "log10": _bf_log10,
+    "ln": _bf_log,
     "abs": abs,
     "min": min,
     "max": max,
-    "floor": math.floor,
-    "ceil": math.ceil,
+    "floor": lambda x: math.floor(_to_float(x)),
+    "ceil": lambda x: math.ceil(_to_float(x)),
     "clamp": lambda x, lo, hi: max(lo, min(x, hi)),
-    "round": round,
+    "round": lambda x, *args: round(_to_float(x), *args),
     "sum": lambda *args: sum(args),
     "prod": lambda *args: math.prod(args),
 }

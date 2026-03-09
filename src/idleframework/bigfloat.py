@@ -69,12 +69,12 @@ def _normalize(mantissa: float, exponent: int) -> tuple[float, int]:
     new_mantissa = abs_m / (10.0 ** shift)
     new_exponent = exponent + shift
 
-    # Fix floating-point edge cases where new_mantissa might be slightly
-    # outside [1, 10)
-    if new_mantissa >= 10.0:
+    # Fix floating-point edge cases where new_mantissa might be
+    # outside [1, 10) due to log10 rounding
+    while new_mantissa >= 10.0:
         new_mantissa /= 10.0
         new_exponent += 1
-    elif new_mantissa < 1.0:
+    while 0 < new_mantissa < 1.0:
         new_mantissa *= 10.0
         new_exponent -= 1
 
@@ -95,6 +95,12 @@ class BigFloat:
     """
 
     __slots__ = ("mantissa", "exponent")
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("BigFloat is immutable")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError("BigFloat is immutable")
 
     def __init__(self, value: Numeric = 0) -> None:
         if isinstance(value, BigFloat):
@@ -259,6 +265,41 @@ class BigFloat:
         if self.mantissa >= 0:
             return BigFloat(self)
         return -self
+
+    def __mod__(self, other: Numeric) -> BigFloat:
+        other = self._coerce(other)
+        if other._is_zero():
+            raise ZeroDivisionError("BigFloat modulo by zero")
+        # Use float modulo to avoid precision issues from division + floor
+        return BigFloat(float(self) % float(other))
+
+    def __rmod__(self, other: Numeric) -> BigFloat:
+        other = self._coerce(other)
+        return other.__mod__(self)
+
+    def floor(self) -> int:
+        """Return the floor as an integer."""
+        if self._is_zero():
+            return 0
+        if self.exponent < 0:
+            # |value| < 1
+            return -1 if self.mantissa < 0 else 0
+        val = float(self)
+        if not math.isfinite(val):
+            raise OverflowError("BigFloat too large for integer floor")
+        return math.floor(val)
+
+    def ceil(self) -> int:
+        """Return the ceiling as an integer."""
+        if self._is_zero():
+            return 0
+        if self.exponent < 0:
+            # |value| < 1
+            return 0 if self.mantissa < 0 else 1
+        val = float(self)
+        if not math.isfinite(val):
+            raise OverflowError("BigFloat too large for integer ceil")
+        return math.ceil(val)
 
     # ------------------------------------------------------------------
     # Log

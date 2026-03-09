@@ -362,3 +362,102 @@ class TestFormatting:
         bf = BigFloat(0)
         s = format_bigfloat(bf, "scientific")
         assert "0" in s
+
+
+class TestBigFloatImmutability:
+    def test_cannot_set_mantissa(self):
+        bf = BigFloat(42)
+        with pytest.raises(AttributeError):
+            bf.mantissa = 999.0
+
+    def test_cannot_set_exponent(self):
+        bf = BigFloat(42)
+        with pytest.raises(AttributeError):
+            bf.exponent = 100
+
+    def test_cannot_delete_mantissa(self):
+        bf = BigFloat(42)
+        with pytest.raises(AttributeError):
+            del bf.mantissa
+
+
+class TestBigFloatNegativePow:
+    def test_negative_base_even_power(self):
+        result = BigFloat(-2) ** 2
+        assert float(result) == pytest.approx(4.0)
+
+    def test_negative_base_odd_power(self):
+        result = BigFloat(-2) ** 3
+        assert float(result) == pytest.approx(-8.0)
+
+    def test_negative_base_fractional_power_raises(self):
+        with pytest.raises(ValueError, match="non-integer"):
+            BigFloat(-2) ** 0.5
+
+    def test_negative_base_zero_power(self):
+        result = BigFloat(-5) ** 0
+        assert float(result) == pytest.approx(1.0)
+
+
+class TestBigFloatFloorCeil:
+    def test_floor_positive(self):
+        assert BigFloat(3.7).floor() == 3
+
+    def test_floor_negative(self):
+        assert BigFloat(-3.2).floor() == -4
+
+    def test_floor_integer(self):
+        assert BigFloat(5).floor() == 5
+
+    def test_ceil_positive(self):
+        assert BigFloat(3.2).ceil() == 4
+
+    def test_ceil_negative(self):
+        assert BigFloat(-3.7).ceil() == -3
+
+    def test_ceil_integer(self):
+        assert BigFloat(5).ceil() == 5
+
+    def test_floor_small_fraction(self):
+        bf = BigFloat.from_components(5.0, -1)  # 0.5
+        assert bf.floor() == 0
+
+    def test_floor_zero(self):
+        assert BigFloat(0).floor() == 0
+
+
+class TestBigFloatMod:
+    def test_mod_basic(self):
+        result = BigFloat(10) % BigFloat(3)
+        assert float(result) == pytest.approx(1.0)
+
+    def test_mod_exact(self):
+        result = BigFloat(12) % BigFloat(4)
+        assert float(result) == pytest.approx(0.0)
+
+    def test_rmod(self):
+        result = 10 % BigFloat(3)
+        assert float(result) == pytest.approx(1.0)
+
+
+class TestNormalizationInvariant:
+    """Verify mantissa is always in [1, 10) after all operations."""
+
+    def test_from_components_edge_case(self):
+        """Mantissa exactly at boundary should normalize correctly."""
+        bf = BigFloat.from_components(10.0, 5)
+        assert 1.0 <= bf.mantissa < 10.0
+        assert float(bf) == pytest.approx(1e6)
+
+    def test_from_components_very_small_mantissa(self):
+        bf = BigFloat.from_components(0.001, 10)
+        assert 1.0 <= bf.mantissa < 10.0
+        assert float(bf) == pytest.approx(1e7)
+
+    def test_after_subtraction_near_cancellation(self):
+        """Subtracting nearly equal values must still normalize."""
+        a = BigFloat.from_components(1.0000001, 10)
+        b = BigFloat.from_components(1.0000000, 10)
+        result = a - b
+        if not result._is_zero():
+            assert 1.0 <= abs(result.mantissa) < 10.0

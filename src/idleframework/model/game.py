@@ -34,6 +34,7 @@ class GameDefinition(BaseModel):
     def _validate_game(self) -> "GameDefinition":
         self._validate_unique_node_ids()
         self._validate_unique_edge_ids()
+        self._validate_edge_references()
         self._validate_upgrade_targets()
         self._validate_formulas()
         return self
@@ -51,6 +52,24 @@ class GameDefinition(BaseModel):
             if edge.id in seen:
                 raise ValueError(f"Duplicate edge ID: {edge.id!r}")
             seen.add(edge.id)
+
+    def _validate_edge_references(self) -> None:
+        node_ids = {n.id for n in self.nodes}
+        for edge in self.edges:
+            if edge.source not in node_ids:
+                raise ValueError(
+                    f"Edge {edge.id!r}: source {edge.source!r} does not "
+                    f"reference an existing node"
+                )
+            if edge.target not in node_ids:
+                raise ValueError(
+                    f"Edge {edge.id!r}: target {edge.target!r} does not "
+                    f"reference an existing node"
+                )
+            if edge.edge_type == "state_modifier" and not edge.formula:
+                raise ValueError(
+                    f"Edge {edge.id!r}: state_modifier edge must have a formula"
+                )
 
     def _validate_upgrade_targets(self) -> None:
         node_ids = {n.id for n in self.nodes}

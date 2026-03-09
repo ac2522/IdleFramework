@@ -523,6 +523,80 @@ class TestUpgradeTargetValidation:
             )
 
 
+# ---------- Edge referential integrity ----------
+
+
+class TestEdgeReferentialIntegrity:
+    def test_dangling_edge_source_rejected(self):
+        from idleframework.model.edges import Edge
+        from idleframework.model.game import GameDefinition
+        from idleframework.model.nodes import Resource
+
+        with pytest.raises(ValidationError, match="nonexistent_source"):
+            GameDefinition(
+                schema_version="1.0",
+                name="BadEdge",
+                nodes=[Resource(id="gold", name="Gold")],
+                edges=[
+                    Edge(
+                        id="e1", source="nonexistent_source", target="gold",
+                        edge_type="production_target",
+                    ),
+                ],
+                stacking_groups={},
+            )
+
+    def test_dangling_edge_target_rejected(self):
+        from idleframework.model.edges import Edge
+        from idleframework.model.game import GameDefinition
+        from idleframework.model.nodes import Generator, Resource
+
+        with pytest.raises(ValidationError, match="nonexistent_target"):
+            GameDefinition(
+                schema_version="1.0",
+                name="BadEdge",
+                nodes=[
+                    Resource(id="gold", name="Gold"),
+                    Generator(
+                        id="gen1", name="G", base_production=1.0,
+                        cost_base=10.0, cost_growth_rate=1.07,
+                    ),
+                ],
+                edges=[
+                    Edge(
+                        id="e1", source="gen1", target="nonexistent_target",
+                        edge_type="production_target",
+                    ),
+                ],
+                stacking_groups={},
+            )
+
+    def test_state_modifier_without_formula_rejected(self):
+        from idleframework.model.edges import Edge
+        from idleframework.model.game import GameDefinition
+        from idleframework.model.nodes import Generator, Resource
+
+        with pytest.raises(ValidationError, match="formula"):
+            GameDefinition(
+                schema_version="1.0",
+                name="BadEdge",
+                nodes=[
+                    Resource(id="gold", name="Gold"),
+                    Generator(
+                        id="gen1", name="G", base_production=1.0,
+                        cost_base=10.0, cost_growth_rate=1.07,
+                    ),
+                ],
+                edges=[
+                    Edge(
+                        id="e1", source="gen1", target="gold",
+                        edge_type="state_modifier",
+                    ),
+                ],
+                stacking_groups={},
+            )
+
+
 # ---------- Formula validation at load ----------
 
 
