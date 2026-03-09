@@ -1,0 +1,81 @@
+{
+    "schema_version": "1.0",
+    "name": "MiniCap",
+    "description": "Minimal AdCap-like game for unit testing. 3 generators, 10 upgrades, 1 prestige layer.",
+    "stacking_groups": {
+        "cash_upgrades": "multiplicative",
+        "angel_bonus": "additive",
+        "milestones": "multiplicative"
+    },
+    "nodes": [
+        {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
+        {"id": "angels", "type": "resource", "name": "Angels", "initial_value": 0},
+
+        {"id": "lemonade", "type": "generator", "name": "Lemonade Stand",
+         "base_production": 1.0, "cost_base": 4.0, "cost_growth_rate": 1.07, "cycle_time": 1.0},
+        {"id": "newspaper", "type": "generator", "name": "Newspaper Delivery",
+         "base_production": 60.0, "cost_base": 60.0, "cost_growth_rate": 1.15, "cycle_time": 3.0},
+        {"id": "carwash", "type": "generator", "name": "Car Wash",
+         "base_production": 720.0, "cost_base": 720.0, "cost_growth_rate": 1.14, "cycle_time": 6.0},
+
+        {"id": "x3_lemon", "type": "upgrade", "name": "x3 Lemonade",
+         "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 1000.0,
+         "target": "lemonade", "stacking_group": "cash_upgrades"},
+        {"id": "x3_news", "type": "upgrade", "name": "x3 Newspaper",
+         "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 5000.0,
+         "target": "newspaper", "stacking_group": "cash_upgrades"},
+        {"id": "x3_wash", "type": "upgrade", "name": "x3 Car Wash",
+         "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 25000.0,
+         "target": "carwash", "stacking_group": "cash_upgrades"},
+        {"id": "x3_all_1", "type": "upgrade", "name": "x3 All Profit",
+         "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 100000.0,
+         "target": "_all", "stacking_group": "cash_upgrades"},
+        {"id": "x3_all_2", "type": "upgrade", "name": "x3 All Profit II",
+         "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 500000.0,
+         "target": "_all", "stacking_group": "cash_upgrades"},
+
+        {"id": "angel_x2_lemon", "type": "upgrade", "name": "Angel x2 Lemonade",
+         "upgrade_type": "multiplicative", "magnitude": 2.0, "cost": 10.0,
+         "target": "lemonade", "stacking_group": "cash_upgrades", "tags": ["angel_upgrade"]},
+        {"id": "angel_x2_news", "type": "upgrade", "name": "Angel x2 Newspaper",
+         "upgrade_type": "multiplicative", "magnitude": 2.0, "cost": 25.0,
+         "target": "newspaper", "stacking_group": "cash_upgrades", "tags": ["angel_upgrade"]},
+        {"id": "angel_x2_wash", "type": "upgrade", "name": "Angel x2 Car Wash",
+         "upgrade_type": "multiplicative", "magnitude": 2.0, "cost": 50.0,
+         "target": "carwash", "stacking_group": "cash_upgrades", "tags": ["angel_upgrade"]},
+        {"id": "angel_x7_all", "type": "upgrade", "name": "Angel x7.77 All",
+         "upgrade_type": "multiplicative", "magnitude": 7.77, "cost": 1000.0,
+         "target": "_all", "stacking_group": "cash_upgrades", "tags": ["angel_upgrade"]},
+        {"id": "paid_x10", "type": "upgrade", "name": "x10 All (Paid)",
+         "upgrade_type": "multiplicative", "magnitude": 10.0, "cost": 0.0,
+         "target": "_all", "stacking_group": "cash_upgrades", "tags": ["paid"]},
+
+        {"id": "prestige", "type": "prestige_layer",
+         "name": "Angel Investors",
+         "formula_expr": "150 * sqrt(lifetime_earnings / 1e15)",
+         "layer_index": 0,
+         "reset_scope": ["cash", "lemonade", "newspaper", "carwash",
+                         "x3_lemon", "x3_news", "x3_wash", "x3_all_1", "x3_all_2"],
+         "persistence_scope": ["angels", "angel_x2_lemon", "angel_x2_news",
+                               "angel_x2_wash", "angel_x7_all", "paid_x10"],
+         "bonus_type": "multiplicative"},
+
+        {"id": "milestone_25_lemon", "type": "achievement",
+         "name": "25 Lemonade Stands",
+         "condition_type": "single_threshold",
+         "targets": [{"node_id": "lemonade", "property": "count", "threshold": 25}],
+         "logic": "and",
+         "bonus": {"type": "multiplicative", "magnitude": 2.0, "target": "lemonade", "stacking_group": "milestones"},
+         "permanent": true},
+
+        {"id": "end", "type": "end_condition",
+         "condition_type": "single_threshold",
+         "targets": [{"node_id": "cash", "property": "current_value", "threshold": 1e15}],
+         "logic": "and"}
+    ],
+    "edges": [
+        {"id": "e_lemon_cash", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+        {"id": "e_news_cash", "source": "newspaper", "target": "cash", "edge_type": "production_target"},
+        {"id": "e_wash_cash", "source": "carwash", "target": "cash", "edge_type": "production_target"}
+    ]
+}
