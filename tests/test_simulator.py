@@ -7,7 +7,6 @@ converge toward the math engine's analytical answer.
 import json
 import pytest
 from pathlib import Path
-from idleframework.bigfloat import BigFloat
 
 
 def rk4_step(state: dict, production_rates: dict, dt: float) -> dict:

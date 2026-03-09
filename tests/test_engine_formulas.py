@@ -8,7 +8,6 @@ Tests that:
 import pytest
 from idleframework.model.game import GameDefinition
 from idleframework.engine.segments import PiecewiseEngine
-from idleframework.dsl.compiler import compile_formula, evaluate_formula
 
 
 class TestGraphValidationOnInit:

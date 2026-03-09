@@ -42,7 +42,6 @@ class GreedyOptimizer:
         """
         candidates = []
         pay_resource = self._engine._find_payment_resource()
-        current_total_rate = self._engine.get_production_rate(pay_resource)
 
         # Generator candidates
         for gen_id, gen in self._engine._generators.items():
@@ -190,7 +189,6 @@ class GreedyOptimizer:
 
         for candidate in candidates:
             cost = candidate["cost"]
-            node_id = candidate["node_id"]
 
             if balance >= cost - 1e-10:
                 # Can afford now — buy it
@@ -207,7 +205,6 @@ class GreedyOptimizer:
     def _execute_purchase(self, candidate: dict) -> PurchaseEvent:
         """Execute a purchase and return the event."""
         node_id = candidate["node_id"]
-        cost = candidate["cost"]
 
         if candidate["type"] == "upgrade":
             actual_cost = self._engine.purchase_upgrade(node_id)

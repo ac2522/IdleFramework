@@ -8,7 +8,6 @@ Detectors identify common balance issues:
 """
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass, field
 
 from idleframework.model.game import GameDefinition
@@ -62,15 +61,11 @@ def detect_dead_upgrades(
     - Its efficiency (delta_production / cost) is negligible compared to
       the cheapest generator at that point
     """
-    engine = PiecewiseEngine(game)
-    pay_resource = engine._find_payment_resource()
-
     # Run a greedy simulation to estimate total earnings
     result = _run_greedy(game, simulation_time)
     max_earnings = result.final_balance + sum(p.cost for p in result.purchases)
 
-    # Also check which upgrades were purchased
-    purchased_upgrades = {p.node_id for p in result.purchases}
+    engine = PiecewiseEngine(game)
 
     dead = []
     for upg_id, upg in engine._upgrades.items():

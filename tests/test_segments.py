@@ -7,7 +7,6 @@ import json
 import pytest
 from pathlib import Path
 from idleframework.engine.segments import PiecewiseEngine
-from idleframework.engine.events import PurchaseEvent
 from idleframework.model.game import GameDefinition
 
 

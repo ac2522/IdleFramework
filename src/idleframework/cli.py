@@ -5,8 +5,6 @@ Entry point: `idleframework <command> <args>`
 from __future__ import annotations
 
 import json
-import sys
-from dataclasses import asdict
 from pathlib import Path
 
 import typer
@@ -81,7 +79,7 @@ def analyze(game_file: str, time: float = 300.0) -> None:
     # Optimizer result
     if report.optimizer_result:
         opt = report.optimizer_result
-        typer.echo(f"\nOptimizer result:")
+        typer.echo("\nOptimizer result:")
         typer.echo(f"  Purchases: {len(opt.purchases)}")
         typer.echo(f"  Final production: {opt.final_production:.2e}")
         typer.echo(f"  Final balance: {opt.final_balance:.2e}")
@@ -212,8 +210,8 @@ def compare(
         ratio = baseline_prod / variant_prod if variant_prod > 0 else float("inf")
         typer.echo(f"\nWithout '{tag}' upgrades: {variant_prod:.2e}/s (baseline is {ratio:.1f}x)")
 
-    typer.echo(f"\nFree strategy: excludes paid upgrades")
-    typer.echo(f"Paid strategy: includes all upgrades (baseline)")
+    typer.echo("\nFree strategy: excludes paid upgrades")
+    typer.echo("Paid strategy: includes all upgrades (baseline)")
 
 
 def _exclude_tag(game: GameDefinition, tag: str) -> GameDefinition:

@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/engine/segments.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1e-10, 1e-06, 100, 10000, '_all', 'bonuses', 'generator', 'multiplicative', 'production_target', 'resource', 'rule', 'upgrade']

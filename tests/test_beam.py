@@ -5,7 +5,6 @@ exploring multiple purchase paths in parallel. This lets it find
 solutions where a locally suboptimal purchase (e.g., an expensive
 multiplier) leads to globally better production.
 """
-import copy
 import json
 import pytest
 from pathlib import Path
@@ -83,10 +82,7 @@ class TestBeamExploresAlternatives:
         # With beam_width=3, we should have explored multiple paths
         assert isinstance(result, OptimizeResult)
         assert len(result.purchases) > 0
-        # The result should include purchases of both generator types
-        # (beam explores alternatives unlike greedy which only picks one)
-        node_ids = {p.node_id for p in result.purchases}
-        # At minimum, the beam should have considered both generators
+        # At minimum, the beam should have made multiple purchases
         assert len(result.purchases) >= 2
 
 

@@ -5,7 +5,7 @@ associativity/distributivity don't hold — we test within tolerance).
 """
 import math
 import pytest
-from hypothesis import given, settings, assume
+from hypothesis import given, settings
 from hypothesis.strategies import floats, integers, composite
 from idleframework.bigfloat import BigFloat
 

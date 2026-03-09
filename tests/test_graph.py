@@ -1,9 +1,7 @@
 """Graph validation tests — NetworkX-based structural analysis."""
-import pytest
 from idleframework.model.game import GameDefinition
 from idleframework.graph.validation import (
     build_graph,
-    validate_graph,
     find_dependency_cycles,
     check_edge_compatibility,
     check_tag_subgraph,

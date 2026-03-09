@@ -3,14 +3,13 @@
 Tests node/edge construction, discriminated union serialization,
 JSON Schema export, and validation error messages.
 """
-import json
 import pytest
 from pydantic import ValidationError
 from idleframework.model.nodes import (
-    Resource, Generator, Upgrade, PrestigeLayer, Achievement,
-    UnlockGate, ChoiceGroup, EndCondition, NodeUnion,
+    Resource, Generator, Upgrade, Achievement,
+    EndCondition,
 )
-from idleframework.model.edges import Edge, EdgeUnion
+from idleframework.model.edges import Edge
 from idleframework.model.game import GameDefinition
 
 

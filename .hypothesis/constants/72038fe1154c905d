@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/optimizer/mcts.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1e-10, 1e-06, 0.1, 1.41, 100, 500, 'cost', 'efficiency', 'inf', 'node_id', 'type', 'upgrade']

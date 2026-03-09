@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/export.py
+# hypothesis_version: 6.151.9
+
+['!', '"', '#', '%', '&', "'", '*', ':', '>', '@', 'GameDefinition', '[', '[]', '\\"', 'false', 'item', 'json', 'no', 'null', 'true', 'unicode', 'yes', '{', '{}', '|']

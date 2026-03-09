@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/model/edges.py
+# hypothesis_version: 6.151.9
+
+['activator', 'consumption', 'production_target', 'resource_flow', 'state_modifier', 'trigger', 'unlock_dependency', 'upgrade_target']

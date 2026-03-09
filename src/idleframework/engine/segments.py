@@ -14,7 +14,6 @@ Multiplier is computed from stacking groups:
 """
 from __future__ import annotations
 
-import math
 
 from idleframework.model.game import GameDefinition
 from idleframework.model.stacking import compute_final_multiplier

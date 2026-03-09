@@ -5,9 +5,6 @@ then eval'd with restricted builtins. Security relies on AST node whitelist.
 """
 import math
 import pytest
-from hypothesis import given, settings
-from hypothesis.strategies import floats
-from idleframework.dsl.parser import parse_formula
 from idleframework.dsl.compiler import compile_formula, evaluate_formula
 
 

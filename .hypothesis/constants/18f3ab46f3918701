@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/optimizer/bnb.py
+# hypothesis_version: 6.151.9
+
+[-1.0, 1e-10, 1e-06, 500, 'cost', 'delta_production', 'efficiency', 'node_id', 'type', 'upgrade']

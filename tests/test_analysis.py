@@ -10,8 +10,6 @@ import json
 import pytest
 from pathlib import Path
 from idleframework.model.game import GameDefinition
-from idleframework.engine.segments import PiecewiseEngine
-from idleframework.optimizer.greedy import GreedyOptimizer
 from idleframework.analysis.detectors import (
     detect_dead_upgrades,
     detect_progression_walls,

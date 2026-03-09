@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/model/game.py
+# hypothesis_version: 6.151.9
+
+[1e-05, 0.001, 'additive', 'after', 'lowest_cost', 'multiplicative', 'percentage', 'seconds']

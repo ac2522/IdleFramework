@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/reports/html.py
+# hypothesis_version: 6.151.9
+
+['</ul>', '<ul>', 'Count', 'Node', 'Production Rate', 'Purchase Count', 'Rate', 'Time (s)', 'Total Cost', 'cdn', 'dominant_gen', 'lines+markers', 'production_rate', 'time']

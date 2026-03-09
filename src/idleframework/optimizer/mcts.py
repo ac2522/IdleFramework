@@ -11,7 +11,7 @@ import random
 from dataclasses import dataclass, field
 
 from idleframework.engine.segments import PiecewiseEngine
-from idleframework.engine.solvers import bulk_cost, time_to_afford
+from idleframework.engine.solvers import time_to_afford
 from idleframework.engine.events import PurchaseEvent
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 

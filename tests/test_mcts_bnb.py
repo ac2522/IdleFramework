@@ -6,7 +6,6 @@ and average backup. Should be anytime (more iterations = equal or better).
 Branch-and-Bound: DFS with pruning via upper-bound estimates. Should find
 provably optimal sequences for small problems.
 """
-import copy
 import itertools
 import json
 import pytest
@@ -15,7 +14,7 @@ from pathlib import Path
 from idleframework.model.game import GameDefinition
 from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_cost, time_to_afford
-from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
+from idleframework.optimizer.greedy import OptimizeResult
 from idleframework.optimizer.mcts import MCTSOptimizer
 from idleframework.optimizer.bnb import BranchAndBoundOptimizer
 

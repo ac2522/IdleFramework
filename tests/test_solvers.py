@@ -6,9 +6,7 @@ Formulas from design doc:
 - generator chain: t^n / n! (homogeneous), t^n / product(r_i) (heterogeneous)
 - time_to_afford: cost / production_rate (constant), Brent's for complex
 """
-import math
 import pytest
-from idleframework.bigfloat import BigFloat
 from idleframework.engine.solvers import (
     bulk_cost,
     max_affordable,

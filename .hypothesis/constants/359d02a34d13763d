@@ -1,0 +1,4 @@
+# file: /home/zaia/Development/IdleFramework/.worktrees/phase1/src/idleframework/dsl/compiler.py
+# hypothesis_version: 6.151.9
+
+[1000000.0, '!=', '<', '<=', '==', '>', '>=', 'False', 'NAME', 'NUMBER', 'True', '__', '__builtins__', '_code', '_safe_pow', '_source', 'abs', 'add', 'cbrt', 'ceil', 'clamp', 'comparison', 'div', 'eval', 'floor', 'func_call', 'if', 'ln', 'log', 'log10', 'max', 'min', 'mod', 'mul', 'neg', 'number', 'piecewise', 'pow', 'prod', 'round', 'sqrt', 'start', 'sub', 'sum', 'variable']
