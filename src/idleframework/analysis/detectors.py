@@ -23,6 +23,8 @@ class AnalysisReport:
 def _run_greedy(game: GameDefinition, simulation_time: float, initial_balance: float = 50.0) -> OptimizeResult:
     engine = PiecewiseEngine(game)
     pay_resource = engine._get_primary_resource_id()
+    if pay_resource is None:
+        raise ValueError("Game must contain at least one resource node for analysis")
     engine.set_balance(pay_resource, initial_balance)
     for gen_id in engine._generators:
         cost = bulk_cost(
@@ -77,7 +79,8 @@ def detect_progression_walls(
 ) -> list[dict]:
     engine = PiecewiseEngine(game)
     pay_resource = engine._get_primary_resource_id()
-
+    if pay_resource is None:
+        raise ValueError("Game must contain at least one resource node for analysis")
     engine.set_balance(pay_resource, 50.0)
     for gen_id in engine._generators:
         cost = bulk_cost(
@@ -158,6 +161,9 @@ def detect_dominant_strategy(
             gen_ids.append(node.id)
 
     if len(gen_ids) < 2:
+        return {"dominant_gen": None, "ratio": 1.0, "productions": {}}
+
+    if pay_resource is None:
         return {"dominant_gen": None, "ratio": 1.0, "productions": {}}
 
     productions = {}

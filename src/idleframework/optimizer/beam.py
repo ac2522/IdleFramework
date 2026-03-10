@@ -92,6 +92,8 @@ class BeamSearchOptimizer:
                         else:
                             actual_cost = branch_engine.purchase(node_id, 1)
                     except ValueError:
+                        # Expected: advance_to may auto-purchase, changing state
+                        # so the candidate may no longer be valid. Skip this branch.
                         continue
 
                     branch_purchases.append(PurchaseEvent(

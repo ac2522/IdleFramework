@@ -57,6 +57,7 @@ class MCTSOptimizer:
         pay_resource = self._engine._get_primary_resource_id()
 
         step_count = 0
+        consecutive_failures = 0
         while step_count < max_steps and self._engine.time < target_time:
             greedy = GreedyOptimizer(self._engine._game, copy.deepcopy(self._engine.state))
             candidates = greedy.get_candidates()
@@ -114,8 +115,12 @@ class MCTSOptimizer:
                 else:
                     actual_cost = self._engine.purchase(best_id, 1)
             except ValueError:
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    break
                 continue
 
+            consecutive_failures = 0
             event = PurchaseEvent(
                 time=self._engine.time,
                 node_id=best_id,

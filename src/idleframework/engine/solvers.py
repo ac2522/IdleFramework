@@ -301,8 +301,15 @@ def time_to_afford_polynomial(
     upper = ((degree + 1) * cost / c_n) ** (1.0 / (degree + 1))
     # Ensure the bracket actually contains the root
     upper = max(upper, 1.0) * 2.0
-    while accumulated(upper) < 0:
+    for _ in range(100):
+        if accumulated(upper) >= 0:
+            break
         upper *= 2.0
+    else:
+        raise ValueError(
+            "Could not bracket root for polynomial solver: "
+            "production may be zero or negative"
+        )
 
     t_solution = brentq(accumulated, 0.0, upper, xtol=1e-12)
     return float(t_solution)

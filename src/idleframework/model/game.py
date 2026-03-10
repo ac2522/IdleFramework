@@ -36,6 +36,7 @@ class GameDefinition(BaseModel):
         self._validate_unique_edge_ids()
         self._validate_edge_references()
         self._validate_upgrade_targets()
+        self._validate_stacking_groups()
         self._validate_formulas()
         return self
 
@@ -79,6 +80,16 @@ class GameDefinition(BaseModel):
                     raise ValueError(
                         f"Target {node.target!r} on upgrade {node.id!r} "
                         f"does not reference a valid node ID"
+                    )
+
+    def _validate_stacking_groups(self) -> None:
+        for node in self.nodes:
+            if isinstance(node, Upgrade):
+                if node.stacking_group not in self.stacking_groups:
+                    raise ValueError(
+                        f"Upgrade {node.id!r} references stacking_group "
+                        f"{node.stacking_group!r} which is not defined in "
+                        f"stacking_groups"
                     )
 
     def _validate_formulas(self) -> None:

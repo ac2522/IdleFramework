@@ -479,7 +479,7 @@ class TestUpgradeTargetValidation:
                 ),
             ],
             edges=[],
-            stacking_groups={},
+            stacking_groups={"speed": "multiplicative"},
         )
 
     def test_all_target_passes(self):
@@ -498,7 +498,7 @@ class TestUpgradeTargetValidation:
                 ),
             ],
             edges=[],
-            stacking_groups={},
+            stacking_groups={"speed": "multiplicative"},
         )
 
     def test_invalid_target_rejected(self):
@@ -518,7 +518,7 @@ class TestUpgradeTargetValidation:
                     ),
                 ],
                 edges=[],
-                stacking_groups={},
+                stacking_groups={"speed": "multiplicative"},
             )
 
 

@@ -121,6 +121,8 @@ class BranchAndBoundOptimizer:
                 else:
                     actual_cost = branch_engine.purchase(candidate["node_id"], 1)
             except ValueError:
+                # Expected: advance_to may auto-purchase, changing state
+                # so the candidate may no longer be valid. Skip this branch.
                 continue
 
             event = PurchaseEvent(
