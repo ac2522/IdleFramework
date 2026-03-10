@@ -1,1 +1,1 @@
-"""Engine — closed-form solvers, piecewise segments, event scheduling."""
+"""Engine module: closed-form solvers and analytical tools for idle game math."""

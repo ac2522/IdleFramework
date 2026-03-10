@@ -1,1 +1,1 @@
-"""Graph operations — NetworkX-based validation and analysis."""
+"""Graph validation and analysis for idle game definitions."""

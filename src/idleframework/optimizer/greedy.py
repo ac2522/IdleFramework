@@ -1,28 +1,45 @@
-"""Greedy optimizer for idle game purchase sequencing.
+"""Greedy optimizer — always buys the highest efficiency item next.
 
-At each step, evaluates all purchasable candidates (generators + upgrades)
-and picks the one with highest efficiency = delta_production / cost.
+Wraps PiecewiseEngine to advance time to each purchase, then pick the
+most efficient next candidate. Efficiency formulas:
 
-Efficiency formulas:
-- Generator: base_production / cycle_time / next_unit_cost
-- Multiplicative upgrade: current_production * (magnitude - 1) / cost
-- Additive upgrade: current_production * magnitude / cost
-  (magnitude is the raw bonus, e.g., 0.05 for +5%)
+- Generator: delta_production / cost
+- Multiplicative upgrade: production * (magnitude - 1) / cost
+- Additive upgrade: bonus * (base_production / cycle_time) / cost
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
+from idleframework.bigfloat import BigFloat
 from idleframework.engine.segments import PiecewiseEngine
-from idleframework.engine.solvers import bulk_cost, time_to_afford
-from idleframework.engine.events import PurchaseEvent
+from idleframework.engine.solvers import bulk_purchase_cost
+from idleframework.model.nodes import Generator, Upgrade
+from idleframework.model.state import GameState
+
+if TYPE_CHECKING:
+    from idleframework.model.game import GameDefinition
+
+
+@dataclass
+class PurchaseStep:
+    """A single purchase decision."""
+
+    time: float
+    node_id: str
+    cost: float
+    efficiency: float
+    cash_before: float
+    cash_after: float
 
 
 @dataclass
 class OptimizeResult:
-    """Result of an optimization run."""
+    """Result from any optimizer run."""
 
-    purchases: list[PurchaseEvent] = field(default_factory=list)
+    purchases: list = field(default_factory=list)
     timeline: list[dict] = field(default_factory=list)
     final_production: float = 0.0
     final_balance: float = 0.0
@@ -30,273 +47,310 @@ class OptimizeResult:
 
 
 class GreedyOptimizer:
-    """Greedy purchase optimizer — picks highest efficiency at each step."""
+    """Greedy optimizer: always buy the highest-efficiency item next."""
 
-    def __init__(self, engine: PiecewiseEngine):
-        self._engine = engine
+    def __init__(self, game: "GameDefinition", state: GameState | None = None):
+        self.game = game
+        self.engine = PiecewiseEngine(game, state)
+        self.steps: list[PurchaseStep] = []
+
+    def compute_generator_efficiency(self, gen_id: str) -> float:
+        """Efficiency of buying 1 more of a generator.
+
+        Formula: (base_production / cycle_time * multiplier) / cost
+        """
+        node = self.game.get_node(gen_id)
+        if not isinstance(node, Generator):
+            return 0.0
+
+        ns = self.engine.state.get(gen_id)
+        cost_bf = bulk_purchase_cost(
+            BigFloat(node.cost_base),
+            BigFloat(node.cost_growth_rate),
+            ns.owned,
+            1,
+        )
+        cost = float(cost_bf)
+        if cost <= 0:
+            return float("inf")
+
+        gen_mult = self.engine._compute_generator_multipliers().get(gen_id, 1.0)
+        delta_prod = node.base_production / node.cycle_time * gen_mult
+        return delta_prod / cost
+
+    def compute_upgrade_efficiency(self, upgrade_id: str) -> float:
+        """Efficiency of buying an upgrade.
+
+        Multiplicative: production * (magnitude - 1) / cost
+        Additive: bonus * (base_production / cycle_time) / cost
+        """
+        node = self.game.get_node(upgrade_id)
+        if not isinstance(node, Upgrade):
+            return 0.0
+
+        ns = self.engine.state.get(upgrade_id)
+        if ns.purchased:
+            return 0.0
+
+        cost = node.cost
+        if cost <= 0:
+            return float("inf")
+
+        if node.upgrade_type == "multiplicative":
+            # production * (magnitude - 1) / cost
+            if node.target == "_all":
+                rates = self.engine.compute_production_rates()
+                current_prod = sum(rates.values())
+            else:
+                target_node = self.game.get_node(node.target)
+                if isinstance(target_node, Generator):
+                    tns = self.engine.state.get(node.target)
+                    if tns.owned <= 0:
+                        return 0.0
+                    gen_mult = self.engine._compute_generator_multipliers().get(
+                        node.target, 1.0
+                    )
+                    current_prod = (
+                        target_node.base_production
+                        * tns.owned
+                        / target_node.cycle_time
+                        * gen_mult
+                    )
+                else:
+                    return 0.0
+            return current_prod * (node.magnitude - 1) / cost
+
+        if node.upgrade_type == "additive":
+            # bonus * (base_production / cycle_time) / cost
+            if node.target == "_all":
+                # For _all additive, sum base_production / cycle_time across all generators
+                total_base = 0.0
+                for n in self.game.nodes:
+                    if isinstance(n, Generator) and self.engine.state.get(n.id).owned > 0:
+                        total_base += n.base_production / n.cycle_time
+                return node.magnitude * total_base / cost
+            else:
+                target_node = self.game.get_node(node.target)
+                if isinstance(target_node, Generator):
+                    base_rate = target_node.base_production / target_node.cycle_time
+                    return node.magnitude * base_rate / cost
+                return 0.0
+
+        if node.upgrade_type == "percentage":
+            # Similar to multiplicative but magnitude is a percentage
+            rates = self.engine.compute_production_rates()
+            current_prod = sum(rates.values())
+            return current_prod * (node.magnitude / 100.0) / cost
+
+        return 0.0
+
+    def find_best_purchase(self) -> tuple[str, float] | None:
+        """Find the highest-efficiency purchase.
+
+        Returns (node_id, efficiency) or None.
+        """
+        best_id: str | None = None
+        best_eff = -1.0
+
+        for node in self.game.nodes:
+            if isinstance(node, Generator):
+                eff = self.compute_generator_efficiency(node.id)
+                if eff > best_eff:
+                    best_eff = eff
+                    best_id = node.id
+
+            elif isinstance(node, Upgrade):
+                ns = self.engine.state.get(node.id)
+                if ns.purchased:
+                    continue
+                eff = self.compute_upgrade_efficiency(node.id)
+                if eff > best_eff:
+                    best_eff = eff
+                    best_id = node.id
+
+        if best_id is None or best_eff <= 0:
+            return None
+        return (best_id, best_eff)
+
+    def total_production_rate(self) -> float:
+        """Current total production rate across all resources."""
+        rates = self.engine.compute_production_rates()
+        return sum(rates.values())
+
+    def run(
+        self,
+        target_time: float | None = None,
+        max_steps: int = 1000,
+    ) -> list[PurchaseStep]:
+        """Run greedy optimization until target_time or max_steps.
+
+        Returns the purchase sequence.
+        """
+        steps: list[PurchaseStep] = []
+
+        for _ in range(max_steps):
+            # Find best purchase
+            best = self.find_best_purchase()
+            if best is None:
+                break
+
+            node_id, efficiency = best
+
+            # Compute cost of this purchase
+            node = self.game.get_node(node_id)
+            ns = self.engine.state.get(node_id)
+            if isinstance(node, Generator):
+                cost_bf = bulk_purchase_cost(
+                    BigFloat(node.cost_base),
+                    BigFloat(node.cost_growth_rate),
+                    ns.owned,
+                    1,
+                )
+                cost = float(cost_bf)
+            elif isinstance(node, Upgrade):
+                cost = node.cost
+            else:
+                break
+
+            # Get current balance
+            currency_id = self.engine._get_primary_resource_id()
+            if currency_id is None:
+                break
+            balance = self.engine.state.get(currency_id).current_value
+
+            # If we can't afford it, accumulate resources until we can
+            if balance < cost:
+                rates = self.engine.compute_production_rates()
+                currency_rate = rates.get(currency_id, 0.0)
+                if currency_rate <= 0:
+                    break  # Can never afford it
+                time_needed = (cost - balance) / currency_rate
+                advance_target = self.engine.current_time + time_needed
+
+                if target_time is not None and advance_target > target_time:
+                    # Can't afford before target_time — just accumulate to end
+                    dt = target_time - self.engine.current_time
+                    self.engine._accumulate(rates, dt)
+                    self.engine._time = target_time
+                    self.engine.state.elapsed_time = target_time
+                    break
+
+                # Accumulate without triggering auto-purchases
+                dt = advance_target - self.engine.current_time
+                self.engine._accumulate(rates, dt)
+                self.engine._time = advance_target
+                self.engine.state.elapsed_time = advance_target
+
+            # Record cash before purchase
+            cash_before = self.engine.state.get(currency_id).current_value
+
+            # Execute purchase
+            self.engine.purchase(node_id)
+
+            cash_after = self.engine.state.get(currency_id).current_value
+
+            step = PurchaseStep(
+                time=self.engine.current_time,
+                node_id=node_id,
+                cost=cost,
+                efficiency=efficiency,
+                cash_before=cash_before,
+                cash_after=cash_after,
+            )
+            steps.append(step)
+
+            # Check if we've passed target_time
+            if target_time is not None and self.engine.current_time >= target_time:
+                break
+
+        self.steps.extend(steps)
+        return steps
 
     def get_candidates(self) -> list[dict]:
-        """Compute efficiency for all purchasable items.
+        """Get all purchasable candidates with their efficiency metrics.
 
-        Returns list of dicts with keys: node_id, type, cost, efficiency, delta_production.
+        Returns list of dicts with keys: node_id, type, cost, efficiency,
+        delta_production. Used by beam/MCTS/BnB optimizers.
         """
-        candidates = []
-        pay_resource = self._engine._find_payment_resource()
+        candidates: list[dict] = []
+        gen_multipliers = self.engine._compute_generator_multipliers()
 
-        # Generator candidates
-        for gen_id, gen in self._engine._generators.items():
-            owned = self._engine.get_owned(gen_id)
-            cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, owned, 1)
-            if cost <= 0:
-                continue
-
-            # Delta production from one more unit
-            target_resource = self._engine._production_edges.get(gen_id)
-            if target_resource is None:
-                continue
-
-            multiplier = self._engine.get_generator_multiplier(gen_id)
-            delta = gen.base_production / gen.cycle_time * multiplier
-            efficiency = delta / cost
-
-            candidates.append({
-                "node_id": gen_id,
-                "type": "generator",
-                "cost": cost,
-                "efficiency": efficiency,
-                "delta_production": delta,
-            })
-
-        # Upgrade candidates
-        for upg_id, upg in self._engine._upgrades.items():
-            if self._engine.is_upgrade_owned(upg_id):
-                continue
-            cost = upg.cost
-            if cost <= 0:
-                # Free upgrade — infinite efficiency, always buy immediately
+        for node in self.game.nodes:
+            if isinstance(node, Generator):
+                ns = self.engine.state.get(node.id)
+                cost_bf = bulk_purchase_cost(
+                    BigFloat(node.cost_base),
+                    BigFloat(node.cost_growth_rate),
+                    ns.owned,
+                    1,
+                )
+                cost = float(cost_bf)
+                if cost <= 0:
+                    continue
+                gen_mult = gen_multipliers.get(node.id, 1.0)
+                delta_prod = node.base_production / node.cycle_time * gen_mult
+                eff = delta_prod / cost
                 candidates.append({
-                    "node_id": upg_id,
-                    "type": "upgrade",
-                    "cost": 0.0,
-                    "efficiency": float("inf"),
-                    "delta_production": 0.0,
+                    "node_id": node.id,
+                    "type": "generator",
+                    "cost": cost,
+                    "efficiency": eff,
+                    "delta_production": delta_prod,
                 })
-                continue
 
-            delta = self._compute_upgrade_delta(upg, pay_resource)
-            efficiency = delta / cost if cost > 0 else float("inf")
-
-            candidates.append({
-                "node_id": upg_id,
-                "type": "upgrade",
-                "cost": cost,
-                "efficiency": efficiency,
-                "delta_production": delta,
-            })
+            elif isinstance(node, Upgrade):
+                ns = self.engine.state.get(node.id)
+                if ns.purchased:
+                    continue
+                cost = node.cost
+                if cost <= 0:
+                    cost = 0.0
+                eff = self.compute_upgrade_efficiency(node.id)
+                delta_prod = self.engine._estimate_upgrade_delta(node, gen_multipliers)
+                candidates.append({
+                    "node_id": node.id,
+                    "type": "upgrade",
+                    "cost": cost,
+                    "efficiency": eff,
+                    "delta_production": delta_prod,
+                })
 
         return candidates
-
-    def _compute_upgrade_delta(self, upg, pay_resource: str) -> float:
-        """Compute production delta from purchasing an upgrade."""
-        # Find which generators this upgrade affects
-        affected_gen_ids = []
-        if upg.target == "_all":
-            affected_gen_ids = list(self._engine._generators.keys())
-        else:
-            if upg.target in self._engine._generators:
-                affected_gen_ids = [upg.target]
-
-        total_delta = 0.0
-        for gen_id in affected_gen_ids:
-            target_resource = self._engine._production_edges.get(gen_id)
-            if target_resource != pay_resource:
-                continue
-
-            gen = self._engine._generators[gen_id]
-            count = self._engine.get_owned(gen_id)
-            if count == 0:
-                continue
-
-            current_mult = self._engine.get_generator_multiplier(gen_id)
-            base_rate = count * gen.base_production / gen.cycle_time
-
-            # Compute what the new multiplier would be after purchasing this upgrade
-            # We need to simulate adding this upgrade's bonus to its stacking group
-            group_name = upg.stacking_group
-            rule = self._engine._game.stacking_groups.get(group_name, "multiplicative")
-
-            if rule == "multiplicative":
-                # New mult = current_mult * magnitude
-                new_mult = current_mult * upg.magnitude
-            elif rule == "additive":
-                # Additive: group goes from (1 + existing_sum) to (1 + existing_sum + magnitude)
-                # Delta in multiplier = magnitude * (product of other groups)
-                # Simpler: delta_production = base_rate * magnitude * (other_groups_product)
-                # Since current_mult = all_groups_product, and this group contributes (1 + sum),
-                # adding magnitude increases this group by magnitude, so:
-                # new_total = current_mult + base_rate_without_this_group * magnitude
-                # Actually: new_mult = current_mult / current_group * (current_group + magnitude)
-                # For simplicity, delta = base_rate * magnitude (approx for small bonuses)
-                new_mult = current_mult + self._get_other_groups_product(gen_id, group_name) * upg.magnitude
-            elif rule == "percentage":
-                new_mult = current_mult + self._get_other_groups_product(gen_id, group_name) * upg.magnitude / 100.0
-            else:
-                new_mult = current_mult * upg.magnitude
-
-            delta = base_rate * (new_mult - current_mult)
-            total_delta += delta
-
-        return total_delta
-
-    def _get_other_groups_product(self, gen_id: str, exclude_group: str) -> float:
-        """Product of all stacking group multipliers except the excluded one."""
-        groups: dict[str, dict] = {}
-
-        for upg_id, owned in self._engine._upgrades_owned.items():
-            if not owned:
-                continue
-            upg = self._engine._upgrades[upg_id]
-            if upg.target != gen_id and upg.target != "_all":
-                continue
-            if upg.stacking_group == exclude_group:
-                continue
-
-            group_name = upg.stacking_group
-            if group_name not in groups:
-                rule = self._engine._game.stacking_groups.get(group_name, "multiplicative")
-                groups[group_name] = {"rule": rule, "bonuses": []}
-            groups[group_name]["bonuses"].append(upg.magnitude)
-
-        from idleframework.model.stacking import compute_final_multiplier
-        return compute_final_multiplier(groups)
-
-    def step(self) -> PurchaseEvent | None:
-        """Execute one greedy step: pick best candidate and purchase it.
-
-        If the best candidate isn't affordable yet, advance time until it is.
-        Returns the purchase event, or None if nothing can ever be purchased.
-        """
-        candidates = self.get_candidates()
-        if not candidates:
-            return None
-
-        # Sort by efficiency descending, then by cost ascending (prefer cheaper on ties)
-        candidates.sort(key=lambda c: (-c["efficiency"], c["cost"]))
-
-        pay_resource = self._engine._find_payment_resource()
-        balance = self._engine.get_balance(pay_resource)
-        rate = self._engine.get_production_rate(pay_resource)
-
-        for candidate in candidates:
-            cost = candidate["cost"]
-
-            if balance >= cost - 1e-10:
-                # Can afford now — buy it
-                return self._execute_purchase(candidate)
-
-            # Need to wait — check if we can ever afford it
-            if rate <= 0:
-                continue
-
-            return candidate  # Return best candidate (will be waited for in optimize())
-
-        return None
-
-    def _execute_purchase(self, candidate: dict) -> PurchaseEvent:
-        """Execute a purchase and return the event."""
-        node_id = candidate["node_id"]
-
-        if candidate["type"] == "upgrade":
-            actual_cost = self._engine.purchase_upgrade(node_id)
-        else:
-            actual_cost = self._engine.purchase(node_id, 1)
-
-        return PurchaseEvent(
-            time=self._engine.time,
-            node_id=node_id,
-            count=1,
-            cost=actual_cost,
-        )
 
     def optimize(
         self,
         target_time: float,
         max_steps: int = 500,
     ) -> OptimizeResult:
-        """Run greedy optimization to target_time.
+        """Run greedy optimization and return an OptimizeResult.
 
-        At each step:
-        1. Compute efficiency for all candidates
-        2. Pick the best one
-        3. If not affordable, advance time until it is
-        4. Purchase it
-        5. Record timeline entry
+        This wraps ``run()`` to produce the result format expected by
+        beam/MCTS/BnB optimizers and the analysis module.
         """
-        result = OptimizeResult()
-        pay_resource = self._engine._find_payment_resource()
+        from idleframework.engine.events import PurchaseEvent
 
-        # Record initial state
-        result.timeline.append({
-            "time": self._engine.time,
-            "production_rate": self._engine.get_production_rate(pay_resource),
-        })
+        steps = self.run(target_time=target_time, max_steps=max_steps)
 
-        step_count = 0
-        while step_count < max_steps and self._engine.time < target_time:
-            candidates = self.get_candidates()
-            if not candidates:
-                break
+        purchases = []
+        timeline = []
+        pay_resource = self.engine._get_primary_resource_id()
 
-            # Sort by efficiency descending, cost ascending for ties
-            candidates.sort(key=lambda c: (-c["efficiency"], c["cost"]))
-            best = candidates[0]
-
-            if best["efficiency"] <= 0:
-                break
-
-            cost = best["cost"]
-            balance = self._engine.get_balance(pay_resource)
-            rate = self._engine.get_production_rate(pay_resource)
-
-            # If can't afford, advance time until we can
-            if balance < cost - 1e-10:
-                if rate <= 0:
-                    break
-                wait = time_to_afford(cost, rate, balance)
-                purchase_time = self._engine.time + wait
-                if purchase_time > target_time:
-                    break
-                self._engine.advance_to(purchase_time)
-
-                # Floating-point drift: if still just short, nudge forward
-                new_balance = self._engine.get_balance(pay_resource)
-                if new_balance < cost - 1e-10:
-                    nudge = min(purchase_time + 1e-6, target_time)
-                    if nudge > self._engine.time:
-                        self._engine.advance_to(nudge)
-
-            # Verify affordability before purchase
-            final_balance = self._engine.get_balance(pay_resource)
-            if final_balance < cost - 1e-10:
-                continue  # Skip this candidate, try next step
-
-            # Execute purchase
-            event = self._execute_purchase(best)
-            result.purchases.append(event)
-            step_count += 1
-
-            # Record timeline
-            result.timeline.append({
-                "time": self._engine.time,
-                "production_rate": self._engine.get_production_rate(pay_resource),
+        for step in steps:
+            purchases.append(PurchaseEvent(
+                time=step.time,
+                node_id=step.node_id,
+                count=1,
+                cost=step.cost,
+            ))
+            timeline.append({
+                "time": step.time,
+                "production_rate": self.engine.get_production_rate(pay_resource) if pay_resource else 0.0,
             })
 
-        # Advance to target time
-        if self._engine.time < target_time:
-            self._engine.advance_to(target_time)
-
-        result.final_production = self._engine.get_production_rate(pay_resource)
-        result.final_balance = self._engine.get_balance(pay_resource)
-        result.final_time = self._engine.time
-
-        return result
+        return OptimizeResult(
+            purchases=purchases,
+            timeline=timeline,
+            final_production=self.engine.get_production_rate(pay_resource) if pay_resource else 0.0,
+            final_balance=self.engine.get_balance(pay_resource) if pay_resource else 0.0,
+            final_time=self.engine.current_time,
+        )

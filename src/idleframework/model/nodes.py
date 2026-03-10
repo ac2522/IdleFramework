@@ -1,16 +1,44 @@
-"""Node type definitions — discriminated union on 'type' field."""
+"""All 17 node types as Pydantic v2 models with discriminated union."""
+
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal, Optional, Union
+
 from pydantic import BaseModel, Field
 
 
+# ---------- Helper models ----------
+
+
+class ConditionTarget(BaseModel):
+    """A condition target for achievements, end conditions, unlock gates."""
+
+    node_id: str
+    property: str
+    threshold: float
+
+
+class ConverterIO(BaseModel):
+    """Input or output spec for a Converter node."""
+
+    resource: str
+    amount: float
+
+
+# ---------- NodeBase ----------
+
+
 class NodeBase(BaseModel):
-    """Shared properties for all node types."""
+    """Base fields shared by all node types."""
+
     id: str
     tags: list[str] = Field(default_factory=list)
     activation_mode: Literal["automatic", "interactive", "passive", "toggle"] = "automatic"
-    cooldown_time: float | None = None
+    pull_mode: Literal["pull_any", "pull_all"] = "pull_any"
+    cooldown_time: Optional[float] = None
+
+
+# ---------- 17 Node types ----------
 
 
 class Resource(NodeBase):
@@ -45,8 +73,8 @@ class Upgrade(NodeBase):
     cost: float
     target: str
     stacking_group: str
-    duration: float | None = None
-    cooldown_time: float | None = None
+    duration: Optional[float] = None
+    cooldown_time: Optional[float] = None
 
 
 class PrestigeLayer(NodeBase):
@@ -57,7 +85,7 @@ class PrestigeLayer(NodeBase):
     reset_scope: list[str]
     persistence_scope: list[str] = Field(default_factory=list)
     bonus_type: str = "multiplicative"
-    milestone_rules: list[dict[str, Any]] = Field(default_factory=list)
+    milestone_rules: list[dict] = Field(default_factory=list)
 
 
 class SacrificeNode(NodeBase):
@@ -68,19 +96,13 @@ class SacrificeNode(NodeBase):
     bonus_type: str = "multiplicative"
 
 
-class ConditionTarget(BaseModel):
-    node_id: str
-    property: str
-    threshold: float
-
-
 class Achievement(NodeBase):
     type: Literal["achievement"] = "achievement"
     name: str = ""
     condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"]
     targets: list[ConditionTarget]
     logic: str = "and"
-    bonus: dict[str, Any] | None = None
+    bonus: Optional[dict] = None
     permanent: bool = True
 
 
@@ -89,11 +111,6 @@ class Manager(NodeBase):
     name: str = ""
     target: str
     automation_type: str = "collect"
-
-
-class ConverterIO(BaseModel):
-    resource: str
-    amount: float
 
 
 class Converter(NodeBase):
@@ -117,17 +134,17 @@ class ProbabilityNode(NodeBase):
 class EndCondition(NodeBase):
     type: Literal["end_condition"] = "end_condition"
     name: str = ""
-    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = "single_threshold"
-    targets: list[ConditionTarget] = Field(default_factory=list)
+    condition_type: str = "single_threshold"
+    targets: list[ConditionTarget]
     logic: str = "and"
 
 
 class UnlockGate(NodeBase):
     type: Literal["unlock_gate"] = "unlock_gate"
     name: str = ""
-    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = "single_threshold"
-    targets: list[ConditionTarget] = Field(default_factory=list)
-    prerequisites: list[str] = Field(default_factory=list)
+    condition_type: str = "single_threshold"
+    targets: list[ConditionTarget]
+    prerequisites: list[str]
     logic: str = "and"
     permanent: bool = True
 
@@ -138,34 +155,51 @@ class ChoiceGroup(NodeBase):
     options: list[str]
     max_selections: int = 1
     respeccable: bool = False
-    respec_cost: float | None = None
+    respec_cost: Optional[float] = None
 
 
 class Register(NodeBase):
     type: Literal["register"] = "register"
     name: str = ""
     formula_expr: str
-    input_labels: list[dict[str, str]] = Field(default_factory=list)
+    input_labels: list[dict[str, str]]
 
 
 class Gate(NodeBase):
     type: Literal["gate"] = "gate"
     name: str = ""
-    mode: Literal["deterministic", "probabilistic"] = "deterministic"
-    weights: list[float] = Field(default_factory=list)
-    probabilities: list[float] = Field(default_factory=list)
+    mode: Literal["deterministic", "probabilistic"]
+    weights: Optional[list[float]] = None
+    probabilities: Optional[list[float]] = None
 
 
 class Queue(NodeBase):
     type: Literal["queue"] = "queue"
     name: str = ""
     delay: float
-    capacity: float | None = None
+    capacity: Optional[int] = None
 
+
+# ---------- Discriminated Union ----------
 
 NodeUnion = Annotated[
-    Resource | Generator | NestedGenerator | Upgrade | PrestigeLayer |
-    SacrificeNode | Achievement | Manager | Converter | ProbabilityNode |
-    EndCondition | UnlockGate | ChoiceGroup | Register | Gate | Queue,
+    Union[
+        Resource,
+        Generator,
+        NestedGenerator,
+        Upgrade,
+        PrestigeLayer,
+        SacrificeNode,
+        Achievement,
+        Manager,
+        Converter,
+        ProbabilityNode,
+        EndCondition,
+        UnlockGate,
+        ChoiceGroup,
+        Register,
+        Gate,
+        Queue,
+    ],
     Field(discriminator="type"),
 ]

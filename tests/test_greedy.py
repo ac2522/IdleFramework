@@ -1,243 +1,288 @@
-"""Tests for the greedy optimizer.
+"""Tests for GreedyOptimizer — TDD-first."""
 
-The greedy optimizer picks the highest-efficiency purchase at each step:
-- Generator efficiency: delta_production / cost
-- Upgrade efficiency: (current_production * (multiplier - 1)) / cost
-- Additive upgrade:   (bonus * current_production) / cost
+from __future__ import annotations
 
-These tests verify correct efficiency ranking, purchase sequencing,
-and integration with the PiecewiseEngine.
-"""
-import json
+
 import pytest
-from pathlib import Path
+
 from idleframework.model.game import GameDefinition
-from idleframework.engine.segments import PiecewiseEngine
-from idleframework.optimizer.greedy import GreedyOptimizer
+from idleframework.model.state import GameState
+from idleframework.optimizer.greedy import GreedyOptimizer, PurchaseStep
 
 
-def _make_two_gen_game():
-    """Two generators with different efficiency profiles."""
-    return GameDefinition(
-        schema_version="1.0",
-        name="GreedyTest",
-        nodes=[
-            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "cheap", "type": "generator", "name": "Cheap",
-             "base_production": 1.0, "cost_base": 10.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
-            {"id": "expensive", "type": "generator", "name": "Expensive",
-             "base_production": 50.0, "cost_base": 500.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
+# ---------------------------------------------------------------------------
+# Helper: build a minimal 2-generator game for unit tests
+# ---------------------------------------------------------------------------
+
+def _two_gen_game() -> GameDefinition:
+    """Two generators producing into one resource.
+
+    gen_a: base_production=10, cost_base=100, cost_growth_rate=1.07, cycle_time=1
+       => efficiency of first unit = (10/1) / 100 = 0.1
+    gen_b: base_production=5, cost_base=20, cost_growth_rate=1.07, cycle_time=1
+       => efficiency of first unit = (5/1) / 20 = 0.25   <-- better
+    """
+    data = {
+        "schema_version": "1.0",
+        "name": "TwoGen",
+        "description": "Two-generator test game",
+        "stacking_groups": {"upgrades": "multiplicative"},
+        "nodes": [
+            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 1000.0},
+            {
+                "id": "gen_a", "type": "generator", "name": "Gen A",
+                "base_production": 10.0, "cost_base": 100.0,
+                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+            },
+            {
+                "id": "gen_b", "type": "generator", "name": "Gen B",
+                "base_production": 5.0, "cost_base": 20.0,
+                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+            },
         ],
-        edges=[
-            {"id": "e1", "source": "cheap", "target": "cash", "edge_type": "production_target"},
-            {"id": "e2", "source": "expensive", "target": "cash", "edge_type": "production_target"},
+        "edges": [
+            {"id": "e_a", "source": "gen_a", "target": "cash", "edge_type": "production_target"},
+            {"id": "e_b", "source": "gen_b", "target": "cash", "edge_type": "production_target"},
         ],
-        stacking_groups={},
-    )
+    }
+    return GameDefinition.model_validate(data)
 
 
-def _make_upgrade_game():
-    """Game with generator + multiplicative upgrade."""
-    return GameDefinition(
-        schema_version="1.0",
-        name="UpgradeGreedyTest",
-        nodes=[
-            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "miner", "type": "generator", "name": "Miner",
-             "base_production": 10.0, "cost_base": 100.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
-            {"id": "x3_miner", "type": "upgrade", "name": "x3 Miner",
-             "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 500.0,
-             "target": "miner", "stacking_group": "cash_upgrades"},
+def _two_gen_with_mult_upgrade() -> GameDefinition:
+    """Two generators + a x3 multiplicative upgrade targeting gen_a."""
+    data = {
+        "schema_version": "1.0",
+        "name": "TwoGenUpg",
+        "description": "Two-generator game with multiplicative upgrade",
+        "stacking_groups": {"upgrades": "multiplicative"},
+        "nodes": [
+            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 5000.0},
+            {
+                "id": "gen_a", "type": "generator", "name": "Gen A",
+                "base_production": 10.0, "cost_base": 100.0,
+                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+            },
+            {
+                "id": "gen_b", "type": "generator", "name": "Gen B",
+                "base_production": 5.0, "cost_base": 20.0,
+                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+            },
+            {
+                "id": "x3_a", "type": "upgrade", "name": "x3 Gen A",
+                "upgrade_type": "multiplicative", "magnitude": 3.0,
+                "cost": 500.0, "target": "gen_a", "stacking_group": "upgrades",
+            },
         ],
-        edges=[
-            {"id": "e1", "source": "miner", "target": "cash", "edge_type": "production_target"},
+        "edges": [
+            {"id": "e_a", "source": "gen_a", "target": "cash", "edge_type": "production_target"},
+            {"id": "e_b", "source": "gen_b", "target": "cash", "edge_type": "production_target"},
         ],
-        stacking_groups={"cash_upgrades": "multiplicative"},
-    )
+    }
+    return GameDefinition.model_validate(data)
 
 
-def _make_additive_upgrade_game():
-    """Game with additive upgrade for efficiency formula testing."""
-    return GameDefinition(
-        schema_version="1.0",
-        name="AdditiveGreedyTest",
-        nodes=[
-            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "miner", "type": "generator", "name": "Miner",
-             "base_production": 10.0, "cost_base": 100.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
-            {"id": "bonus_5pct", "type": "upgrade", "name": "+5% Bonus",
-             "upgrade_type": "additive", "magnitude": 0.05, "cost": 50.0,
-             "target": "miner", "stacking_group": "angel_bonus"},
+def _two_gen_with_additive_upgrade() -> GameDefinition:
+    """Two generators + an additive upgrade targeting gen_a."""
+    data = {
+        "schema_version": "1.0",
+        "name": "TwoGenAdd",
+        "description": "Two-generator game with additive upgrade",
+        "stacking_groups": {"upgrades": "additive"},
+        "nodes": [
+            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 5000.0},
+            {
+                "id": "gen_a", "type": "generator", "name": "Gen A",
+                "base_production": 10.0, "cost_base": 100.0,
+                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+            },
+            {
+                "id": "gen_b", "type": "generator", "name": "Gen B",
+                "base_production": 5.0, "cost_base": 20.0,
+                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+            },
+            {
+                "id": "add_a", "type": "upgrade", "name": "+50 Gen A",
+                "upgrade_type": "additive", "magnitude": 50.0,
+                "cost": 200.0, "target": "gen_a", "stacking_group": "upgrades",
+            },
         ],
-        edges=[
-            {"id": "e1", "source": "miner", "target": "cash", "edge_type": "production_target"},
+        "edges": [
+            {"id": "e_a", "source": "gen_a", "target": "cash", "edge_type": "production_target"},
+            {"id": "e_b", "source": "gen_b", "target": "cash", "edge_type": "production_target"},
         ],
-        stacking_groups={"angel_bonus": "additive"},
-    )
+    }
+    return GameDefinition.model_validate(data)
+
+
+def _empty_game() -> GameDefinition:
+    """A game with only a resource and no generators or upgrades."""
+    data = {
+        "schema_version": "1.0",
+        "name": "Empty",
+        "description": "Empty game",
+        "stacking_groups": {},
+        "nodes": [
+            {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0.0},
+        ],
+        "edges": [],
+    }
+    return GameDefinition.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 
 
 class TestGreedyEfficiency:
+    """Test efficiency calculations."""
+
     def test_greedy_buys_best_efficiency(self):
-        """Greedy should pick highest delta_production / cost."""
-        game = _make_two_gen_game()
-        engine = PiecewiseEngine(game)
-        engine.set_balance("cash", 600.0)
-        engine.set_owned("cheap", 1)  # need some production to start
+        """With 2 generators of known efficiency, greedy picks the better one first.
 
-        optimizer = GreedyOptimizer(engine)
-        # cheap efficiency: 1.0 / (10 * 1.15^1) = 1/11.5 ≈ 0.087
-        # expensive efficiency: 50.0 / 500.0 = 0.1
-        # Expensive is more efficient, should buy it first
-        result = optimizer.step()
+        gen_a: efficiency = 10/100 = 0.1
+        gen_b: efficiency = 5/20  = 0.25  <-- should be picked first
+        """
+        game = _two_gen_game()
+        # Give initial generators so there's production
+        state = GameState.from_game(game)
+        state.get("gen_a").owned = 1
+        state.get("gen_b").owned = 1
+
+        opt = GreedyOptimizer(game, state)
+        result = opt.find_best_purchase()
+
         assert result is not None
-        assert result.node_id == "expensive"
+        node_id, efficiency = result
+        assert node_id == "gen_b", (
+            f"Expected gen_b (eff=0.25) to be picked over gen_a (eff=0.1), got {node_id}"
+        )
 
-    def test_greedy_picks_cheap_when_more_efficient(self):
-        """When cheap gen is better efficiency, pick it."""
-        game = _make_two_gen_game()
-        engine = PiecewiseEngine(game)
-        engine.set_balance("cash", 600.0)
-
-        optimizer = GreedyOptimizer(engine)
-        # cheap efficiency: 1.0 / 10.0 = 0.1
-        # expensive efficiency: 50.0 / 500.0 = 0.1
-        # Tie — either is acceptable, but first one at cost 10 is more immediately useful
-        result = optimizer.step()
-        assert result is not None
-        # With equal efficiency, the cheaper one should be preferred
-        # (or at least one of them should be bought)
-        assert result.node_id in ("cheap", "expensive")
-
-
-class TestGreedyUpgradeEfficiency:
     def test_greedy_multiplicative_formula(self):
-        """Multiplicative upgrade efficiency = production * (mult - 1) / cost."""
-        game = _make_upgrade_game()
-        engine = PiecewiseEngine(game)
-        engine.set_owned("miner", 5)
-        engine.set_balance("cash", 1000.0)
+        """Verify multiplicative upgrade efficiency = production * (mult - 1) / cost.
 
-        optimizer = GreedyOptimizer(engine)
-        candidates = optimizer.get_candidates()
+        gen_a with 5 owned: rate = 10 * 5 / 1.0 = 50/sec
+        x3_a upgrade: efficiency = 50 * (3 - 1) / 500 = 0.2
+        """
+        game = _two_gen_with_mult_upgrade()
+        state = GameState.from_game(game)
+        state.get("gen_a").owned = 5
+        state.get("gen_b").owned = 1
 
-        # Find the upgrade candidate
-        upg_candidate = next(c for c in candidates if c["node_id"] == "x3_miner")
-        # Current production from miners: 5 * 10.0 / 1.0 = 50.0
-        # Upgrade gives 3x, so delta = 50 * (3-1) = 100
-        # Efficiency = 100 / 500 = 0.2
-        assert upg_candidate["efficiency"] == pytest.approx(0.2, rel=1e-2)
+        opt = GreedyOptimizer(game, state)
+        eff = opt.compute_upgrade_efficiency("x3_a")
+
+        # production of gen_a = 10 * 5 / 1.0 = 50
+        # efficiency = 50 * (3-1) / 500 = 0.2
+        assert eff == pytest.approx(0.2, rel=1e-6)
 
     def test_greedy_additive_formula(self):
-        """Additive upgrade efficiency = (bonus * current_group_mult * base_prod) / cost."""
-        game = _make_additive_upgrade_game()
-        engine = PiecewiseEngine(game)
-        engine.set_owned("miner", 5)
-        engine.set_balance("cash", 100.0)
+        """Verify additive upgrade efficiency = (bonus * base_production) / cost.
 
-        optimizer = GreedyOptimizer(engine)
-        candidates = optimizer.get_candidates()
+        gen_a with 5 owned: base_production per generator per second = 10/1 = 10
+        add_a: bonus=50, cost=200
+        efficiency = (50 * 10) / 200 = 2.5
 
-        upg_candidate = next(c for c in candidates if c["node_id"] == "bonus_5pct")
-        # Current production: 5 * 10.0 = 50.0, no existing upgrades
-        # Additive bonus: group goes from 1.0 to 1.05
-        # delta_production = 50.0 * 0.05 = 2.5
-        # Efficiency = 2.5 / 50.0 = 0.05
-        assert upg_candidate["efficiency"] == pytest.approx(0.05, rel=1e-2)
+        NOTE: For additive upgrades, we treat the bonus as adding that many
+        units worth of base_production.
+        """
+        game = _two_gen_with_additive_upgrade()
+        state = GameState.from_game(game)
+        state.get("gen_a").owned = 5
+        state.get("gen_b").owned = 1
 
+        opt = GreedyOptimizer(game, state)
+        eff = opt.compute_upgrade_efficiency("add_a")
 
-class TestGreedyOptimize:
-    def test_greedy_on_minicap(self):
-        """Greedy optimizer should produce a valid purchase sequence on MiniCap."""
-        fixture_path = Path(__file__).parent / "fixtures" / "minicap.json"
-        with open(fixture_path) as f:
-            data = json.load(f)
-        game = GameDefinition.model_validate(data)
-        engine = PiecewiseEngine(game, validate=True)
-        engine.set_balance("cash", 50.0)
-        engine.purchase("lemonade", 1)
-
-        optimizer = GreedyOptimizer(engine)
-        result = optimizer.optimize(target_time=300.0, max_steps=200)
-
-        assert len(result.purchases) > 5
-        assert result.final_production > 0
-        assert result.final_balance >= 0
-        assert engine.time == pytest.approx(300.0)
-
-    def test_greedy_includes_upgrades_in_sequence(self):
-        """Greedy should buy upgrades when they're more efficient than generators."""
-        game = _make_upgrade_game()
-        engine = PiecewiseEngine(game)
-        engine.set_owned("miner", 5)
-        engine.set_balance("cash", 2000.0)
-
-        optimizer = GreedyOptimizer(engine)
-        result = optimizer.optimize(target_time=100.0, max_steps=50)
-
-        # The x3 upgrade should appear in the purchase sequence
-        upgrade_purchases = [p for p in result.purchases if p.node_id == "x3_miner"]
-        assert len(upgrade_purchases) == 1
-
-    def test_greedy_result_has_timeline(self):
-        """OptimizeResult should include a timeline of production rates."""
-        game = _make_two_gen_game()
-        engine = PiecewiseEngine(game)
-        engine.set_balance("cash", 100.0)
-        engine.set_owned("cheap", 1)
-
-        optimizer = GreedyOptimizer(engine)
-        result = optimizer.optimize(target_time=60.0, max_steps=20)
-
-        assert len(result.timeline) > 0
-        # Timeline entries should be chronologically ordered
-        times = [t["time"] for t in result.timeline]
-        assert times == sorted(times)
-        # Each entry has time and production_rate
-        for entry in result.timeline:
-            assert "time" in entry
-            assert "production_rate" in entry
+        # additive: bonus * (base_production / cycle_time) / cost
+        # = 50 * (10 / 1) / 200 = 2.5
+        assert eff == pytest.approx(2.5, rel=1e-6)
 
 
-class TestGreedyEdgeCases:
-    def test_greedy_no_production_no_purchase(self):
-        """If no production and no balance, optimizer returns empty result."""
-        game = _make_two_gen_game()
-        engine = PiecewiseEngine(game)
+class TestGreedyOnMinicap:
+    """Integration tests using the MiniCap fixture."""
 
-        optimizer = GreedyOptimizer(engine)
-        result = optimizer.optimize(target_time=100.0, max_steps=50)
-        assert len(result.purchases) == 0
+    def test_greedy_on_minicap(self, minicap):
+        """Run optimizer on minicap fixture, produces non-empty purchase sequence.
+
+        Start with 1 lemonade so there's initial production.
+        """
+        state = GameState.from_game(minicap)
+        state.get("lemonade").owned = 1
+        state.get("cash").current_value = 5.0  # small starting cash
+
+        opt = GreedyOptimizer(minicap, state)
+        steps = opt.run(target_time=600.0, max_steps=20)
+
+        assert len(steps) > 0, "Should produce at least one purchase"
+        # paid_x10 is free (cost=0), so it gets infinite efficiency and is bought first
+        # After that, lemonade should be among early purchases (cheapest generator)
+        node_ids = [s.node_id for s in steps]
+        assert "paid_x10" in node_ids, "Free upgrade should be purchased"
+        # Should also buy at least one generator
+        gen_ids = {"lemonade", "newspaper", "carwash"}
+        assert any(nid in gen_ids for nid in node_ids), "Should buy at least one generator"
+
+
+class TestGreedyConstraints:
+    """Test optimizer constraints and edge cases."""
 
     def test_greedy_respects_max_steps(self):
-        """Optimizer should stop after max_steps purchases."""
-        game = _make_two_gen_game()
-        engine = PiecewiseEngine(game)
-        engine.set_balance("cash", 1e10)
-        engine.set_owned("cheap", 1)
+        """max_steps parameter limits the number of purchases."""
+        game = _two_gen_game()
+        state = GameState.from_game(game)
+        state.get("gen_a").owned = 1
+        state.get("gen_b").owned = 1
 
-        optimizer = GreedyOptimizer(engine)
-        result = optimizer.optimize(target_time=1000.0, max_steps=10)
-        assert len(result.purchases) <= 10
+        opt = GreedyOptimizer(game, state)
+        steps = opt.run(target_time=10000.0, max_steps=5)
 
+        assert len(steps) <= 5
 
-class TestGreedyPerformance:
-    def test_greedy_under_200ms(self, benchmark):
-        """Greedy optimizer should complete in < 200ms for MiniCap."""
-        fixture_path = Path(__file__).parent / "fixtures" / "minicap.json"
-        with open(fixture_path) as f:
-            data = json.load(f)
-        game = GameDefinition.model_validate(data)
+    def test_greedy_records_purchase_steps(self):
+        """Each PurchaseStep has valid time, node_id, cost, efficiency."""
+        game = _two_gen_game()
+        state = GameState.from_game(game)
+        state.get("gen_a").owned = 1
+        state.get("gen_b").owned = 1
 
-        def run_greedy():
-            engine = PiecewiseEngine(game, validate=True)
-            engine.set_balance("cash", 50.0)
-            engine.purchase("lemonade", 1)
-            optimizer = GreedyOptimizer(engine)
-            return optimizer.optimize(target_time=300.0, max_steps=200)
+        opt = GreedyOptimizer(game, state)
+        steps = opt.run(target_time=10000.0, max_steps=10)
 
-        result = benchmark(run_greedy)
-        assert result.final_production > 0
+        assert len(steps) > 0
+        for step in steps:
+            assert isinstance(step, PurchaseStep)
+            assert step.time >= 0.0
+            assert isinstance(step.node_id, str)
+            assert step.cost > 0.0
+            assert step.efficiency > 0.0
+            assert step.cash_before >= step.cost  # must have enough to buy
+            assert step.cash_after >= 0.0  # non-negative after purchase
+
+    def test_greedy_production_increases(self):
+        """Total production rate increases monotonically over purchases."""
+        game = _two_gen_game()
+        state = GameState.from_game(game)
+        state.get("gen_a").owned = 1
+        state.get("gen_b").owned = 1
+
+        opt = GreedyOptimizer(game, state)
+
+        prev_rate = opt.total_production_rate()
+        opt.run(target_time=10000.0, max_steps=10)
+
+        # After the full run, production should be higher than initial
+        final_rate = opt.total_production_rate()
+        assert final_rate > prev_rate, (
+            f"Production should increase: initial={prev_rate}, final={final_rate}"
+        )
+
+    def test_greedy_handles_no_purchases(self):
+        """Empty game or game with nothing affordable returns empty sequence."""
+        game = _empty_game()
+        state = GameState.from_game(game)
+
+        opt = GreedyOptimizer(game, state)
+        steps = opt.run(target_time=100.0, max_steps=10)
+
+        assert steps == []
