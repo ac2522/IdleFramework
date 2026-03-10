@@ -1,8 +1,4 @@
-"""HTML report generator using Plotly for idle game analysis results.
-
-Generates a self-contained HTML report with interactive Plotly charts
-for production curves, purchase cost distribution, and analysis summaries.
-"""
+"""HTML report generator using Plotly for idle game analysis results."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -20,19 +16,8 @@ def generate_report(
     use_cdn: bool = True,
     title: str | None = None,
 ) -> str:
-    """Generate an HTML report from an AnalysisReport.
-
-    Args:
-        report: The analysis report containing optimizer results and findings.
-        use_cdn: If True (default), reference Plotly via CDN. If False, inline the JS.
-        title: Optional custom title. Defaults to "{game_name} Analysis Report".
-
-    Returns:
-        Complete HTML string with embedded Plotly charts.
-    """
     display_title = title or f"{report.game_name} Analysis Report"
 
-    # Build chart fragments
     figures: list[str] = []
 
     opt = report.optimizer_result
@@ -45,12 +30,11 @@ def generate_report(
         if gen_chart:
             figures.append(gen_chart)
 
-    # First figure gets plotly.js included, rest are fragments only
     plotlyjs_mode: str | bool
     if use_cdn:
         plotlyjs_mode = "cdn"
     else:
-        plotlyjs_mode = True  # inline full plotly.js
+        plotlyjs_mode = True
 
     chart_html_parts: list[str] = []
     for i, fig in enumerate(figures):
@@ -63,14 +47,12 @@ def generate_report(
 
     charts_html = "\n".join(chart_html_parts)
 
-    # Build summary section
     summary_html = _build_summary(report)
 
     return _wrap_html(display_title, report.game_name, summary_html, charts_html)
 
 
 def _build_production_chart(timeline: list[dict]) -> go.Figure:
-    """Build a production rate over time line chart."""
     times = [entry["time"] for entry in timeline]
     rates = [entry["production_rate"] for entry in timeline]
 
@@ -90,7 +72,6 @@ def _build_production_chart(timeline: list[dict]) -> go.Figure:
 
 
 def _build_purchase_cost_chart(purchases: list) -> go.Figure:
-    """Build a bar chart of purchase costs by node."""
     cost_by_node: dict[str, float] = defaultdict(float)
     for p in purchases:
         cost_by_node[p.node_id] += p.cost
@@ -113,7 +94,6 @@ def _build_purchase_cost_chart(purchases: list) -> go.Figure:
 
 
 def _build_generator_count_chart(purchases: list) -> go.Figure | None:
-    """Build a bar chart of purchase counts by node type."""
     count_by_node: dict[str, int] = defaultdict(int)
     for p in purchases:
         count_by_node[p.node_id] += p.count
@@ -139,7 +119,6 @@ def _build_generator_count_chart(purchases: list) -> go.Figure | None:
 
 
 def _build_summary(report: AnalysisReport) -> str:
-    """Build the analysis summary HTML section."""
     parts: list[str] = []
 
     parts.append(f"<p><strong>Simulation time:</strong> {report.simulation_time:.1f}s</p>")
@@ -183,7 +162,6 @@ def _build_summary(report: AnalysisReport) -> str:
 
 
 def _wrap_html(title: str, game_name: str, summary_html: str, charts_html: str) -> str:
-    """Wrap content in a full HTML document."""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>

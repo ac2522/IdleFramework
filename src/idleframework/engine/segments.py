@@ -1,291 +1,718 @@
 """Piecewise analytical engine.
 
-Advances game state through analytical segments. Between purchases,
-production is constant so accumulation is linear (rate * dt).
-Each purchase creates a new segment with updated production rates.
-
-Production rate for a generator:
-  effective_rate = count * base_production / cycle_time * multiplier(gen_id)
-
-Multiplier is computed from stacking groups:
-  For each stacking group, collect bonuses from owned upgrades targeting
-  this generator (or _all). Compute per-group multiplier, then multiply
-  all groups together.
+The game timeline is divided into segments between discrete events (purchases,
+prestiges, unlocks). Within each segment the system is fixed and solved
+analytically. The engine computes "time until next affordable purchase"
+algebraically, jumps to that event, applies state changes, and starts a new
+segment.
 """
+
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from idleframework.model.game import GameDefinition
-from idleframework.model.stacking import compute_final_multiplier
-from idleframework.graph.validation import validate_graph
-from idleframework.dsl.compiler import compile_formula, evaluate_formula
-from idleframework.engine.solvers import bulk_cost, time_to_afford
-from idleframework.engine.events import PurchaseEvent
+from idleframework.bigfloat import BigFloat
+from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
+from idleframework.engine.solvers import (
+    bulk_purchase_cost,
+)
+from idleframework.model.nodes import Generator, PrestigeLayer, Register, Resource, Upgrade
+from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
+from idleframework.model.state import GameState
+
+if TYPE_CHECKING:
+    from idleframework.model.game import GameDefinition
+
+
+@dataclass
+class Segment:
+    """A time interval with fixed production rates."""
+
+    start_time: float
+    end_time: float | None  # None if open-ended
+    production_rates: dict[str, float]  # resource_id -> rate/sec
+    multiplier: float  # from stacking groups
+    events: list[str] = field(default_factory=list)  # what caused this segment
 
 
 class PiecewiseEngine:
-    """Core simulation engine using piecewise-constant analytical segments."""
+    """Piecewise analytical engine for idle game simulation.
 
-    def __init__(self, game: GameDefinition, validate: bool = False):
-        self._game = game
-        self._time = 0.0
+    Divides the timeline into segments at purchase events and solves each
+    segment analytically using closed-form solutions.
+    """
 
+    def __init__(
+        self,
+        game: "GameDefinition",
+        state: GameState | None = None,
+        validate: bool = False,
+    ):
         if validate:
+            from idleframework.graph.validation import validate_graph
             errors = validate_graph(game)
             if errors:
-                raise ValueError(f"Validation errors: {'; '.join(errors)}")
+                raise ValueError(f"Graph validation errors: {errors}")
 
-        # State: owned counts per generator
-        self._owned: dict[str, int] = {}
-        # State: purchased upgrades (boolean — each can only be bought once)
-        self._upgrades_owned: dict[str, bool] = {}
-        # State: resource balances
-        self._balances: dict[str, float] = {}
+        self._game = game
+        self._state = state if state is not None else GameState.from_game(game)
+        self._segments: list[Segment] = []
+        self._time: float = self._state.elapsed_time
 
-        # Build lookup maps
-        self._nodes = {n.id: n for n in game.nodes}
-        self._generators = {}
-        self._upgrades = {}
-        self._resources = {}
-        self._production_edges: dict[str, str] = {}  # generator_id -> resource_id
-
-        for node in game.nodes:
-            if node.type == "generator":
+        # Build lookup tables for convenience
+        self._generators: dict[str, Generator] = {}
+        self._upgrades: dict[str, Upgrade] = {}
+        for node in self._game.nodes:
+            if isinstance(node, Generator):
                 self._generators[node.id] = node
-                self._owned[node.id] = 0
-            elif node.type == "upgrade":
+            elif isinstance(node, Upgrade):
                 self._upgrades[node.id] = node
-                self._upgrades_owned[node.id] = False
-            elif node.type == "resource":
-                self._resources[node.id] = node
-                self._balances[node.id] = node.initial_value
 
-        for edge in game.edges:
-            if edge.edge_type == "production_target":
-                self._production_edges[edge.source] = edge.target
+    # -- Properties ----------------------------------------------------------
+
+    @property
+    def state(self) -> GameState:
+        return self._state
+
+    @property
+    def current_time(self) -> float:
+        return self._time
+
+    @property
+    def segments(self) -> list[Segment]:
+        return list(self._segments)
 
     @property
     def time(self) -> float:
         return self._time
 
-    def get_balance(self, resource_id: str) -> float:
-        return self._balances.get(resource_id, 0.0)
+    # -- Convenience accessors -----------------------------------------------
 
     def set_balance(self, resource_id: str, value: float) -> None:
-        self._balances[resource_id] = value
-
-    def get_owned(self, node_id: str) -> int:
-        return self._owned.get(node_id, 0)
+        """Set the current balance of a resource."""
+        self._state.get(resource_id).current_value = value
 
     def set_owned(self, node_id: str, count: int) -> None:
-        self._owned[node_id] = count
+        """Set how many of a node are owned."""
+        self._state.get(node_id).owned = count
 
-    def is_upgrade_owned(self, upgrade_id: str) -> bool:
-        return self._upgrades_owned.get(upgrade_id, False)
+    def get_balance(self, resource_id: str) -> float:
+        """Get the current balance of a resource."""
+        return self._state.get(resource_id).current_value
 
-    def get_generator_multiplier(self, gen_id: str) -> float:
-        """Compute total multiplier for a generator from all owned upgrades.
-
-        Collects bonuses from upgrades targeting this generator or _all,
-        groups them by stacking_group, applies the stacking rule per group,
-        then multiplies all group results together.
-        """
-        # Collect bonuses by stacking group
-        groups: dict[str, dict] = {}
-
-        for upg_id, owned in self._upgrades_owned.items():
-            if not owned:
-                continue
-            upg = self._upgrades[upg_id]
-            if upg.target != gen_id and upg.target != "_all":
-                continue
-
-            group_name = upg.stacking_group
-            if group_name not in groups:
-                rule = self._game.stacking_groups.get(group_name, "multiplicative")
-                groups[group_name] = {"rule": rule, "bonuses": []}
-
-            groups[group_name]["bonuses"].append(upg.magnitude)
-
-        return compute_final_multiplier(groups)
+    def get_owned(self, node_id: str) -> int:
+        """Get how many of a node are owned."""
+        return self._state.get(node_id).owned
 
     def get_production_rate(self, resource_id: str) -> float:
-        """Total production rate for a resource from all generators."""
-        total = 0.0
-        for gen_id, target_id in self._production_edges.items():
-            if target_id == resource_id:
-                gen = self._generators.get(gen_id)
-                if gen is not None:
-                    count = self._owned.get(gen_id, 0)
-                    multiplier = self.get_generator_multiplier(gen_id)
-                    total += count * gen.base_production / gen.cycle_time * multiplier
-        return total
+        """Get current production rate for a single resource."""
+        return self.compute_production_rates().get(resource_id, 0.0)
 
-    def advance_to(self, target_time: float) -> None:
-        """Advance time, accumulating resources at current production rates."""
-        if target_time <= self._time:
-            return
-        dt = target_time - self._time
-        for resource_id in self._balances:
-            rate = self.get_production_rate(resource_id)
-            self._balances[resource_id] += rate * dt
-        self._time = target_time
+    def is_upgrade_owned(self, upgrade_id: str) -> bool:
+        """Check if an upgrade has been purchased."""
+        return self._state.get(upgrade_id).purchased
+
+    # -- Production rates ----------------------------------------------------
+
+    def compute_production_rates(self) -> dict[str, float]:
+        """Compute current per-second production rates for all resources.
+
+        For each active generator with owned > 0, compute:
+            rate = base_production * owned / cycle_time * multiplier
+
+        where multiplier accounts for purchased upgrades targeting that
+        generator (or _all) via stacking groups.
+        """
+        rates: dict[str, float] = {}
+
+        # Build per-generator multiplier from upgrades
+        gen_multipliers = self._compute_generator_multipliers()
+
+        for node in self._game.nodes:
+            if not isinstance(node, Generator):
+                continue
+            ns = self._state.get(node.id)
+            if ns.owned <= 0 or not ns.active:
+                continue
+
+            gen_mult = gen_multipliers.get(node.id, 1.0)
+            rate = node.base_production * ns.owned / node.cycle_time * gen_mult
+
+            # Find which resource(s) this generator produces to
+            for edge in self._game.get_edges_from(node.id):
+                if edge.edge_type == "production_target":
+                    rates[edge.target] = rates.get(edge.target, 0.0) + rate
+
+        return rates
+
+    def _compute_generator_multipliers(self) -> dict[str, float]:
+        """Compute per-generator multipliers from purchased upgrades.
+
+        Groups upgrades by their target generator, computes stacking within
+        each stacking_group, then multiplies across groups.
+
+        Returns dict mapping generator_id -> total multiplier.
+        """
+        # Collect per-generator, per-stacking-group bonuses
+        # Structure: {gen_id: {stacking_group: {"rule": ..., "bonuses": [...]}}}
+        gen_groups: dict[str, dict[str, dict]] = {}
+        # Also track _all upgrades
+        all_groups: dict[str, dict] = {}
+
+        for node in self._game.nodes:
+            if not isinstance(node, Upgrade):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.purchased:
+                continue
+
+            sg = node.stacking_group
+            rule = self._game.stacking_groups.get(sg, "multiplicative")
+
+            if node.target == "_all":
+                if sg not in all_groups:
+                    all_groups[sg] = {"rule": rule, "bonuses": []}
+                all_groups[sg]["bonuses"].append(node.magnitude)
+            else:
+                if node.target not in gen_groups:
+                    gen_groups[node.target] = {}
+                if sg not in gen_groups[node.target]:
+                    gen_groups[node.target][sg] = {"rule": rule, "bonuses": []}
+                gen_groups[node.target][sg]["bonuses"].append(node.magnitude)
+
+        # Compute final multiplier per generator
+        result: dict[str, float] = {}
+
+        # Get all generator IDs
+        gen_ids = {n.id for n in self._game.nodes if isinstance(n, Generator)}
+
+        for gid in gen_ids:
+            # Merge generator-specific groups with _all groups
+            merged: dict[str, dict] = {}
+
+            # Add generator-specific bonuses
+            if gid in gen_groups:
+                for sg, data in gen_groups[gid].items():
+                    merged[sg] = {"rule": data["rule"], "bonuses": list(data["bonuses"])}
+
+            # Add _all bonuses
+            for sg, data in all_groups.items():
+                if sg not in merged:
+                    merged[sg] = {"rule": data["rule"], "bonuses": list(data["bonuses"])}
+                else:
+                    merged[sg]["bonuses"].extend(data["bonuses"])
+
+            if merged:
+                result[gid] = compute_final_multiplier(merged)
+
+        return result
+
+    # -- Next purchase -------------------------------------------------------
+
+    def find_next_purchase(self) -> tuple[str, float] | None:
+        """Find the most efficient next purchase and when it's affordable.
+
+        Evaluates all purchasable generators and upgrades. For each, computes
+        cost and time-to-afford at the production rate of the specific currency
+        required. Returns the most efficient (best delta_production/cost).
+
+        Returns (node_id, time_from_now) or None if nothing is purchasable.
+        """
+        rates = self.compute_production_rates()
+
+        if not rates or all(r <= 0 for r in rates.values()):
+            return None
+
+        # Compute generator multipliers once to avoid repeated recomputation
+        gen_multipliers = self._compute_generator_multipliers()
+
+        candidates: list[tuple[str, float, float]] = []  # (node_id, time, efficiency)
+
+        for node in self._game.nodes:
+            if isinstance(node, Generator):
+                ns = self._state.get(node.id)
+                cost_bf = bulk_purchase_cost(
+                    BigFloat(node.cost_base),
+                    BigFloat(node.cost_growth_rate),
+                    ns.owned,
+                    1,
+                )
+                cost = float(cost_bf)
+                current_balance = self._get_currency_for(node.id)
+
+                # Use the production rate of the specific currency this costs
+                currency_id = self._get_currency_resource_id_for(node.id)
+                currency_rate = rates.get(currency_id, 0.0) if currency_id else 0.0
+
+                if current_balance >= cost:
+                    time_needed = 0.0
+                elif currency_rate <= 0:
+                    continue  # Can never afford this
+                else:
+                    remaining = cost - current_balance
+                    time_needed = remaining / currency_rate
+
+                # Efficiency: what does buying 1 more generator add?
+                gen_mult = gen_multipliers.get(node.id, 1.0)
+                delta_prod = node.base_production / node.cycle_time * gen_mult
+                eff = delta_prod / cost if cost > 0 else float("inf")
+
+                candidates.append((node.id, time_needed, eff))
+
+            elif isinstance(node, Upgrade):
+                ns = self._state.get(node.id)
+                if ns.purchased:
+                    continue  # Already bought
+
+                cost = node.cost
+                current_balance = self._get_currency_for(node.id)
+
+                # Use the production rate of the specific currency
+                currency_id = self._get_currency_resource_id_for(node.id)
+                currency_rate = rates.get(currency_id, 0.0) if currency_id else 0.0
+
+                if current_balance >= cost:
+                    time_needed = 0.0
+                elif currency_rate <= 0:
+                    continue  # Can never afford this
+                else:
+                    remaining = cost - current_balance
+                    time_needed = remaining / currency_rate
+
+                # Efficiency: estimate production gain from the upgrade
+                delta_prod = self._estimate_upgrade_delta(node, gen_multipliers)
+                eff = delta_prod / cost if cost > 0 else float("inf")
+
+                candidates.append((node.id, time_needed, eff))
+
+        if not candidates:
+            return None
+
+        # Among candidates affordable now (time_needed <= 0), pick best efficiency
+        affordable_now = [(nid, t, e) for nid, t, e in candidates if t <= 0]
+        if affordable_now:
+            best = max(affordable_now, key=lambda x: x[2])
+            return (best[0], 0.0)
+
+        # Otherwise pick the one with best efficiency among all
+        best = max(candidates, key=lambda x: x[2])
+        return (best[0], best[1])
+
+    def _get_currency_for(self, node_id: str) -> float:
+        """Get the current balance of the currency used to buy a node.
+
+        Looks up the resource that the node's generator produces to (via
+        production_target edges). For upgrades, uses the target generator's
+        currency. Falls back to the first resource if no edge found.
+        """
+        currency_id = self._get_currency_resource_id_for(node_id)
+        if currency_id:
+            return self._state.get(currency_id).current_value
+        return 0.0
+
+    def _get_currency_resource_id_for(self, node_id: str) -> str | None:
+        """Get the resource ID used to purchase a given node.
+
+        For generators: follows production_target edges from the generator to
+        find which resource it produces (and therefore costs).
+        For upgrades: looks up the target generator's currency, or falls back
+        to the first resource for _all upgrades.
+        """
+        node = self._game.get_node(node_id)
+
+        if isinstance(node, Generator):
+            # Generator's currency is the resource it produces to
+            for edge in self._game.get_edges_from(node_id):
+                if edge.edge_type == "production_target":
+                    return edge.target
+            return self._get_primary_resource_id()
+
+        if isinstance(node, Upgrade):
+            if node.target == "_all":
+                return self._get_primary_resource_id()
+            # Use the same currency as the target generator
+            return self._get_currency_resource_id_for(node.target)
+
+        return self._get_primary_resource_id()
+
+    def _get_primary_resource_id(self) -> str | None:
+        """Get the ID of the first resource node (fallback currency)."""
+        for node in self._game.nodes:
+            if isinstance(node, Resource):
+                return node.id
+        return None
+
+    def _estimate_upgrade_delta(
+        self,
+        upgrade: Upgrade,
+        gen_multipliers: dict[str, float] | None = None,
+    ) -> float:
+        """Estimate production gain from purchasing an upgrade.
+
+        Args:
+            upgrade: The upgrade to evaluate.
+            gen_multipliers: Pre-computed generator multipliers (optional).
+        """
+        if gen_multipliers is None:
+            gen_multipliers = self._compute_generator_multipliers()
+        rates = self.compute_production_rates()
+
+        if upgrade.target == "_all":
+            current_total = sum(rates.values())
+            return current_total * (upgrade.magnitude - 1)
+        else:
+            node = self._game.get_node(upgrade.target)
+            if isinstance(node, Generator):
+                ns = self._state.get(node.id)
+                if ns.owned <= 0:
+                    return 0.0
+                gen_mult = gen_multipliers.get(node.id, 1.0)
+                gen_rate = node.base_production * ns.owned / node.cycle_time * gen_mult
+                return gen_rate * (upgrade.magnitude - 1)
+        return 0.0
+
+    # -- Purchases -----------------------------------------------------------
 
     def purchase(self, node_id: str, count: int = 1) -> float:
-        """Purchase `count` units of a generator. Returns cost paid."""
-        gen = self._generators.get(node_id)
-        if gen is None:
-            raise ValueError(f"Unknown generator: {node_id}")
+        """Execute a purchase: deduct cost, update owned/purchased.
 
-        owned = self._owned.get(node_id, 0)
-        cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, owned, count)
+        For generators, buys ``count`` units. For upgrades, count is ignored.
+        Returns the total cost paid.
+        Raises ValueError if the currency balance is insufficient.
+        """
+        node = self._game.get_node(node_id)
+        ns = self._state.get(node_id)
+        currency_id = self._get_currency_resource_id_for(node_id)
+        total_cost = 0.0
 
-        pay_resource = self._find_payment_resource()
-        balance = self._balances.get(pay_resource, 0.0)
-
-        if balance < cost - 1e-10:
-            raise ValueError(
-                f"Cannot afford {count}x {node_id}: cost={cost:.2f}, "
-                f"balance={balance:.2f}"
+        if isinstance(node, Generator):
+            cost_bf = bulk_purchase_cost(
+                BigFloat(node.cost_base),
+                BigFloat(node.cost_growth_rate),
+                ns.owned,
+                count,
             )
+            cost = float(cost_bf)
+            if currency_id:
+                balance = self._state.get(currency_id).current_value
+                tol = max(1e-4, abs(cost) * 1e-9)
+                if balance < cost - tol:
+                    raise ValueError(
+                        f"Insufficient balance to purchase {node_id!r}: "
+                        f"need {cost:.2f}, have {balance:.2f}"
+                    )
+                # Clamp: if within tolerance, treat as exact
+                if balance < cost:
+                    self._state.get(currency_id).current_value = 0.0
+                else:
+                    self._state.get(currency_id).current_value -= cost
+            ns.owned += count
+            total_cost = cost
 
-        self._balances[pay_resource] -= cost
-        self._owned[node_id] = owned + count
-        return cost
+        elif isinstance(node, Upgrade):
+            if ns.purchased:
+                raise ValueError(f"Already purchased upgrade {node_id!r}")
+            cost = node.cost
+            if currency_id and cost > 0:
+                balance = self._state.get(currency_id).current_value
+                tol = max(1e-4, abs(cost) * 1e-9)
+                if balance < cost - tol:
+                    raise ValueError(
+                        f"Cannot afford upgrade {node_id!r}: "
+                        f"need {cost:.2f}, have {balance:.2f}"
+                    )
+                if balance < cost:
+                    self._state.get(currency_id).current_value = 0.0
+                else:
+                    self._state.get(currency_id).current_value -= cost
+            ns.purchased = True
+            total_cost = cost
+
+        return total_cost
 
     def purchase_upgrade(self, upgrade_id: str) -> float:
-        """Purchase an upgrade. Returns cost paid."""
-        upg = self._upgrades.get(upgrade_id)
-        if upg is None:
-            raise ValueError(f"Unknown upgrade: {upgrade_id}")
+        """Purchase an upgrade by ID. Returns cost paid."""
+        return self.purchase(upgrade_id)
 
-        if self._upgrades_owned.get(upgrade_id, False):
-            raise ValueError(f"Already owned: {upgrade_id}")
-
-        cost = upg.cost
-        pay_resource = self._find_payment_resource()
-        balance = self._balances.get(pay_resource, 0.0)
-
-        if balance < cost - 1e-10:
-            raise ValueError(
-                f"Cannot afford upgrade {upgrade_id}: cost={cost:.2f}, "
-                f"balance={balance:.2f}"
-            )
-
-        self._balances[pay_resource] -= cost
-        self._upgrades_owned[upgrade_id] = True
-        return cost
-
-    def find_next_purchase_event(self, node_id: str) -> PurchaseEvent | None:
-        """Find when the next unit of node_id becomes affordable."""
-        gen = self._generators.get(node_id)
-        if gen is None:
-            return None
-
-        owned = self._owned.get(node_id, 0)
-        cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, owned, 1)
-        pay_resource = self._find_payment_resource()
-        balance = self._balances.get(pay_resource, 0.0)
-        rate = self.get_production_rate(pay_resource)
-
-        if balance >= cost:
-            return PurchaseEvent(
-                time=self._time,
-                node_id=node_id,
-                count=1,
-                cost=cost,
-            )
-
-        if rate <= 0:
-            return None
-
-        try:
-            t = time_to_afford(cost, rate, balance)
-        except ValueError:
-            return None
-
-        return PurchaseEvent(
-            time=self._time + t,
-            node_id=node_id,
-            count=1,
-            cost=cost,
-        )
-
-    def auto_advance(
-        self,
-        target_time: float,
-        max_purchases_per_step: int = 100,
-    ) -> list[PurchaseEvent]:
-        """Advance to target_time, auto-purchasing generators as affordable.
-
-        Returns list of purchases made.
-        """
-        purchases = []
-        safety_counter = 0
-        max_total = 10000  # Absolute safety limit
-
-        while self._time < target_time and safety_counter < max_total:
-            # Find earliest purchase event across all generators
-            best_event: PurchaseEvent | None = None
-            for gen_id in self._generators:
-                event = self.find_next_purchase_event(gen_id)
-                if event is not None and event.time <= target_time:
-                    if best_event is None or event.time < best_event.time:
-                        best_event = event
-
-            if best_event is None:
-                break
-
-            # Advance to purchase time
-            self.advance_to(best_event.time)
-
-            # Buy within step limit
-            step_purchases = 0
-            while step_purchases < max_purchases_per_step:
-                pay_resource = self._find_payment_resource()
-                balance = self._balances.get(pay_resource, 0.0)
-                gen = self._generators[best_event.node_id]
-                owned = self._owned[best_event.node_id]
-                cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, owned, 1)
-                if balance < cost - 1e-10:
-                    break
-                self.purchase(best_event.node_id, 1)
-                purchases.append(PurchaseEvent(
-                    time=self._time,
-                    node_id=best_event.node_id,
-                    count=1,
-                    cost=cost,
-                ))
-                step_purchases += 1
-                safety_counter += 1
-
-            # Small time advance to prevent exact-time loops
-            if self._time < target_time:
-                self.advance_to(min(self._time + 1e-6, target_time))
-
-        # Advance remaining time
-        self.advance_to(target_time)
-        return purchases
-
-    def evaluate_prestige(self, prestige_id: str, **variables: float) -> float:
+    def evaluate_prestige(self, prestige_id: str, **kwargs: float) -> float:
         """Evaluate a prestige layer's formula with given variables."""
-        node = self._nodes.get(prestige_id)
-        if node is None or node.type != "prestige_layer":
-            raise ValueError(f"Unknown prestige layer: {prestige_id}")
-        formula = compile_formula(node.formula_expr)
-        return evaluate_formula(formula, variables)
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+
+        node = self._game.get_node(prestige_id)
+        if not isinstance(node, PrestigeLayer):
+            raise ValueError(f"{prestige_id!r} is not a PrestigeLayer")
+        compiled = compile_formula(node.formula_expr)
+        return float(evaluate_formula(compiled, kwargs))
 
     def evaluate_register(self, register_id: str, variables: dict[str, float]) -> float:
         """Evaluate a register node's formula with given variables."""
-        node = self._nodes.get(register_id)
-        if node is None or node.type != "register":
-            raise ValueError(f"Unknown register: {register_id}")
-        formula = compile_formula(node.formula_expr)
-        return evaluate_formula(formula, variables)
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
 
-    def _find_payment_resource(self) -> str:
-        """Find the primary payment resource (first resource in game)."""
-        for node in self._game.nodes:
-            if node.type == "resource":
-                return node.id
-        raise ValueError("No resource nodes in game")
+        node = self._game.get_node(register_id)
+        if not isinstance(node, Register):
+            raise ValueError(f"{register_id!r} is not a Register")
+        compiled = compile_formula(node.formula_expr)
+        return float(evaluate_formula(compiled, variables))
+
+    def auto_advance(self, target_time: float) -> list[str]:
+        """Advance to target_time with auto-purchasing. Returns list of purchased node IDs."""
+        purchased: list[str] = []
+        segs = self.advance_to(target_time)
+        for seg in segs:
+            for event in seg.events:
+                if event.startswith("purchase:"):
+                    purchased.append(event.split(":", 1)[1])
+        return purchased
+
+    def apply_free_purchases(self) -> list[str]:
+        """Auto-purchase items where cost/balance < free_purchase_threshold.
+
+        Returns list of purchased node IDs.
+        """
+        threshold = self._game.free_purchase_threshold
+        purchased: list[str] = []
+        currency_id = self._get_primary_resource_id()
+        if currency_id is None:
+            return purchased
+
+        changed = True
+        while changed:
+            changed = False
+            balance = self._state.get(currency_id).current_value
+            if balance <= 0:
+                break
+
+            for node in self._game.nodes:
+                if isinstance(node, Generator):
+                    ns = self._state.get(node.id)
+                    cost_bf = bulk_purchase_cost(
+                        BigFloat(node.cost_base),
+                        BigFloat(node.cost_growth_rate),
+                        ns.owned,
+                        1,
+                    )
+                    cost = float(cost_bf)
+                    if cost > 0 and balance >= cost and cost / balance < threshold:
+                        self._state.get(currency_id).current_value -= cost
+                        ns.owned += 1
+                        purchased.append(node.id)
+                        changed = True
+                        balance = self._state.get(currency_id).current_value
+
+                elif isinstance(node, Upgrade):
+                    ns = self._state.get(node.id)
+                    if ns.purchased:
+                        continue
+                    cost = node.cost
+                    if cost > 0 and balance >= cost and cost / balance < threshold:
+                        self._state.get(currency_id).current_value -= cost
+                        ns.purchased = True
+                        purchased.append(node.id)
+                        changed = True
+                        balance = self._state.get(currency_id).current_value
+                    elif cost == 0:
+                        # Free upgrades
+                        ns.purchased = True
+                        purchased.append(node.id)
+                        changed = True
+
+        return purchased
+
+    # -- Main entry point ----------------------------------------------------
+
+    def advance_to(self, target_time: float) -> list[Segment]:
+        """Advance simulation to target_time, creating segments at events.
+
+        For each segment:
+        1. Compute production rates
+        2. Find next affordable purchase (time_to_afford)
+        3. If purchase time < target_time, advance to it, execute purchase
+        4. Repeat until target_time reached
+
+        Returns list of segments created during this call.
+        """
+        new_segments: list[Segment] = []
+        epsilon = self._game.event_epsilon
+
+        while self._time < target_time - 1e-12:
+            # Apply free purchases at current time
+            self.apply_free_purchases()
+
+            rates = self.compute_production_rates()
+
+            # Find next purchase
+            next_purchase = self.find_next_purchase()
+
+            if next_purchase is not None:
+                node_id, time_needed = next_purchase
+                purchase_time = self._time + time_needed
+            else:
+                purchase_time = None
+
+            if purchase_time is not None and purchase_time < target_time - 1e-12:
+                # Advance to purchase time
+                dt = purchase_time - self._time
+                if dt < 0:
+                    dt = 0.0
+
+                seg = self._create_segment(rates, dt, [f"purchase:{node_id}"])
+                new_segments.append(seg)
+
+                # Accumulate resources
+                self._accumulate(rates, dt)
+                self._time = purchase_time
+
+                # Fix floating-point drift: ensure balance covers the purchase
+                # we computed we could afford (time_to_afford said so)
+                self._ensure_can_afford(node_id)
+
+                # Handle chattering: count purchases in this epsilon window
+                purchases_in_window = 0
+                window_start = self._time
+
+                while True:
+                    # Apply free purchases
+                    free = self.apply_free_purchases()
+                    purchases_in_window += len(free)
+
+                    # Execute the purchase (may fail if free purchases spent the balance)
+                    try:
+                        self.purchase(node_id)
+                    except ValueError:
+                        break
+                    purchases_in_window += 1
+
+                    # Check chattering
+                    if purchases_in_window >= MAX_PURCHASES_PER_EPSILON:
+                        # Batch-evaluate: buy all affordable at once
+                        self._batch_purchase_all_affordable()
+                        break
+
+                    # Check for near-simultaneous purchases
+                    rates = self.compute_production_rates()
+                    next_purchase = self.find_next_purchase()
+                    if next_purchase is None:
+                        break
+
+                    node_id, time_needed = next_purchase
+                    if time_needed > epsilon:
+                        break
+                    # Another purchase within epsilon -- continue loop
+                    if self._time + time_needed > window_start + epsilon:
+                        break
+
+            else:
+                # No purchase before target_time -- advance to target
+                dt = target_time - self._time
+                seg = self._create_segment(rates, dt, [])
+                new_segments.append(seg)
+                self._accumulate(rates, dt)
+                self._time = target_time
+
+        self._segments.extend(new_segments)
+        self._state.elapsed_time = self._time
+        return new_segments
+
+    def _create_segment(
+        self, rates: dict[str, float], duration: float, events: list[str]
+    ) -> Segment:
+        """Create a Segment record."""
+        bonuses = collect_stacking_bonuses(self._game, self._state)
+        mult = compute_final_multiplier(bonuses)
+
+        return Segment(
+            start_time=self._time,
+            end_time=self._time + duration if duration is not None else None,
+            production_rates=dict(rates),
+            multiplier=mult,
+            events=events,
+        )
+
+    def _accumulate(self, rates: dict[str, float], dt: float) -> None:
+        """Add production to resource balances for a time interval."""
+        for resource_id, rate in rates.items():
+            ns = self._state.get(resource_id)
+            ns.current_value += rate * dt
+            ns.total_production += rate * dt
+
+        # Track lifetime earnings
+        for resource_id, rate in rates.items():
+            earned = rate * dt
+            if resource_id in self._state.lifetime_earnings:
+                self._state.lifetime_earnings[resource_id] += earned
+            else:
+                self._state.lifetime_earnings[resource_id] = earned
+
+    def _ensure_can_afford(self, node_id: str) -> None:
+        """Nudge balance up if floating-point drift left us barely short."""
+        currency_id = self._get_primary_resource_id()
+        if currency_id is None:
+            return
+        if node_id in self._generators:
+            gen = self._generators[node_id]
+            ns = self._state.get(node_id)
+            cost = float(bulk_purchase_cost(
+                BigFloat(gen.cost_base), BigFloat(gen.cost_growth_rate),
+                ns.owned, 1,
+            ))
+        elif node_id in self._upgrades:
+            cost = self._upgrades[node_id].cost
+        else:
+            return
+        balance = self._state.get(currency_id).current_value
+        if balance < cost and balance >= cost * (1 - 1e-6) - 1e-6:
+            self._state.get(currency_id).current_value = cost
+
+    def _batch_purchase_all_affordable(self) -> None:
+        """Batch-purchase all currently affordable items.
+
+        Used when chattering is detected to break out of the purchase loop.
+        """
+        currency_id = self._get_primary_resource_id()
+        if currency_id is None:
+            return
+
+        changed = True
+        while changed:
+            changed = False
+            balance = self._state.get(currency_id).current_value
+            if balance <= 0:
+                break
+
+            # Find all affordable, sorted by efficiency
+            affordable: list[tuple[str, float, float]] = []
+
+            for node in self._game.nodes:
+                if isinstance(node, Generator):
+                    ns = self._state.get(node.id)
+                    cost_bf = bulk_purchase_cost(
+                        BigFloat(node.cost_base),
+                        BigFloat(node.cost_growth_rate),
+                        ns.owned,
+                        1,
+                    )
+                    cost = float(cost_bf)
+                    if cost <= balance:
+                        gen_mult = self._compute_generator_multipliers().get(node.id, 1.0)
+                        delta = node.base_production / node.cycle_time * gen_mult
+                        eff = delta / cost if cost > 0 else float("inf")
+                        affordable.append((node.id, cost, eff))
+
+                elif isinstance(node, Upgrade):
+                    ns = self._state.get(node.id)
+                    if ns.purchased:
+                        continue
+                    if node.cost <= balance:
+                        delta = self._estimate_upgrade_delta(node)
+                        eff = delta / node.cost if node.cost > 0 else float("inf")
+                        affordable.append((node.id, node.cost, eff))
+
+            if not affordable:
+                break
+
+            # Buy best efficiency first
+            affordable.sort(key=lambda x: x[2], reverse=True)
+            best_id, _, _ = affordable[0]
+            self.purchase(best_id)
+            changed = True

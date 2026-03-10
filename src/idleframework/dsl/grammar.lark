@@ -1,44 +1,39 @@
 // Formula DSL grammar — LALR(1) compatible
-// Operators: + - * / ** %
-// Functions: sqrt, cbrt, log, log10, ln, abs, min, max, floor, ceil, clamp, round, sum, prod
-// Conditionals: if(cond, then, else), piecewise(cond, val, ..., default)
-// Comparisons: < <= > >= == !=
+// Precedence (low to high): comparison < add/sub < mul/div/mod < unary < power
+// Right-associative power, left-associative everything else
+// Note: unary negation binds LESS tightly than **, so -2**2 = -(2**2) = -4
 
-start: expr
+?start: comparison
 
-?expr: or_expr
+?comparison: expr (COMP_OP expr)?
 
-?or_expr: and_expr
-
-?and_expr: comparison
-
-?comparison: arith_expr (COMP_OP arith_expr)?
 COMP_OP: ">=" | "<=" | "!=" | "==" | ">" | "<"
 
-?arith_expr: term
-    | arith_expr "+" term  -> add
-    | arith_expr "-" term  -> sub
+?expr: term
+     | expr "+" term   -> add
+     | expr "-" term   -> sub
 
-?term: factor
-    | term "*" factor      -> mul
-    | term "/" factor       -> div
-    | term "%" factor      -> mod
+?term: unary
+     | term "*" unary  -> mul
+     | term "/" unary  -> div
+     | term "%" unary  -> mod
 
-?factor: unary
-    | unary "**" factor    -> pow
+?unary: power
+      | "-" unary      -> neg
 
-?unary: atom
-    | "-" unary            -> neg
+?power: atom
+      | atom "**" unary  -> pow
 
-?atom: NUMBER              -> number
-    | NAME                 -> variable
-    | "(" expr ")"
-    | func_call
+?atom: NUMBER                          -> number
+     | NAME "(" arguments ")"         -> func_call
+     | NAME                            -> var
+     | "(" comparison ")"             -> paren
 
-func_call: NAME "(" [args] ")"
-args: expr ("," expr)*
+arguments: comparison ("," comparison)*
 
 NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+
 NUMBER: /[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?/
 
-%ignore /\s+/
+%import common.WS
+%ignore WS

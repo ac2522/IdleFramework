@@ -1,1 +1,1 @@
-"""Game model — Pydantic v2 validated node/edge/game definitions."""
+"""Game model: nodes, edges, GameDefinition, GameState."""

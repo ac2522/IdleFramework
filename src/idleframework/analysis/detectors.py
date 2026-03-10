@@ -1,11 +1,4 @@
-"""Balance analysis detectors for idle game definitions.
-
-Detectors identify common balance issues:
-- Dead upgrades: upgrades never worth purchasing within a simulation window
-- Progression walls: points where production growth drops sharply
-- Dominant strategies: one purchase path overwhelms alternatives
-- Sensitivity analysis: how parameter changes affect outcomes
-"""
+"""Balance analysis detectors for idle game definitions."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,8 +11,6 @@ from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 @dataclass
 class AnalysisReport:
-    """Complete analysis report for a game definition."""
-
     game_name: str
     simulation_time: float
     dead_upgrades: list[dict] = field(default_factory=list)
@@ -30,11 +21,8 @@ class AnalysisReport:
 
 
 def _run_greedy(game: GameDefinition, simulation_time: float, initial_balance: float = 50.0) -> OptimizeResult:
-    """Run greedy optimizer on a game and return the result."""
     engine = PiecewiseEngine(game)
-
-    # Find first generator and buy one to bootstrap production
-    pay_resource = engine._find_payment_resource()
+    pay_resource = engine._get_primary_resource_id()
     engine.set_balance(pay_resource, initial_balance)
     for gen_id in engine._generators:
         cost = bulk_cost(
@@ -46,7 +34,7 @@ def _run_greedy(game: GameDefinition, simulation_time: float, initial_balance: f
             engine.purchase(gen_id, 1)
             break
 
-    optimizer = GreedyOptimizer(engine)
+    optimizer = GreedyOptimizer(game, engine.state)
     return optimizer.optimize(target_time=simulation_time, max_steps=500)
 
 
@@ -54,14 +42,6 @@ def detect_dead_upgrades(
     game: GameDefinition,
     simulation_time: float = 600.0,
 ) -> list[dict]:
-    """Detect upgrades that are never worth purchasing.
-
-    An upgrade is "dead" if:
-    - Its cost exceeds total earnings achievable in the simulation window, OR
-    - Its efficiency (delta_production / cost) is negligible compared to
-      the cheapest generator at that point
-    """
-    # Run a greedy simulation to estimate total earnings
     result = _run_greedy(game, simulation_time)
     max_earnings = result.final_balance + sum(p.cost for p in result.purchases)
 
@@ -70,8 +50,7 @@ def detect_dead_upgrades(
     dead = []
     for upg_id, upg in engine._upgrades.items():
         if upg.cost <= 0:
-            continue  # Free upgrades are never dead
-
+            continue
         if upg.cost > max_earnings * 10:
             dead.append({
                 "upgrade_id": upg_id,
@@ -80,8 +59,6 @@ def detect_dead_upgrades(
                 "reason": f"Cost ({upg.cost:.2e}) exceeds 10x total earnings ({max_earnings:.2e})",
             })
             continue
-
-        # Check if the upgrade gives negligible benefit
         if upg.magnitude is not None and upg.magnitude < 1.01 and upg.cost > max_earnings * 0.1:
             dead.append({
                 "upgrade_id": upg_id,
@@ -98,15 +75,9 @@ def detect_progression_walls(
     simulation_time: float = 300.0,
     sample_interval: float = 10.0,
 ) -> list[dict]:
-    """Detect progression walls where growth rate drops sharply.
-
-    Samples production rate at intervals and flags where growth
-    stagnates or drops significantly.
-    """
     engine = PiecewiseEngine(game)
-    pay_resource = engine._find_payment_resource()
+    pay_resource = engine._get_primary_resource_id()
 
-    # Bootstrap
     engine.set_balance(pay_resource, 50.0)
     for gen_id in engine._generators:
         cost = bulk_cost(
@@ -118,12 +89,11 @@ def detect_progression_walls(
             engine.purchase(gen_id, 1)
             break
 
-    optimizer = GreedyOptimizer(engine)
+    optimizer = GreedyOptimizer(game, engine.state)
     result = optimizer.optimize(target_time=simulation_time, max_steps=500)
 
     walls = []
 
-    # Check 1: Generators with abnormally high cost growth rates
     for node in game.nodes:
         if node.type == "generator" and node.cost_growth_rate >= 1.30:
             severity = "severe" if node.cost_growth_rate >= 1.40 else "moderate"
@@ -134,7 +104,6 @@ def detect_progression_walls(
                 "reason": f"Generator '{node.id}' has high cost growth rate ({node.cost_growth_rate:.2f})",
             })
 
-    # Check 2: Timeline stagnation from greedy simulation
     if len(result.timeline) >= 3:
         for i in range(2, len(result.timeline)):
             prev_rate = result.timeline[i - 1]["production_rate"]
@@ -165,16 +134,13 @@ def detect_progression_walls(
 
 
 def _identify_wall_generator(game: GameDefinition) -> str | None:
-    """Identify the generator most likely causing a progression wall."""
     worst_gen = None
     worst_growth = 0.0
-
     for node in game.nodes:
         if node.type == "generator":
             if node.cost_growth_rate > worst_growth:
                 worst_growth = node.cost_growth_rate
                 worst_gen = node.id
-
     return worst_gen
 
 
@@ -182,12 +148,6 @@ def detect_dominant_strategy(
     game: GameDefinition,
     simulation_time: float = 300.0,
 ) -> dict:
-    """Detect if one generator dominates all others.
-
-    Runs isolated simulations for each generator and compares
-    final production. If one is >2x better than the next best,
-    it's flagged as dominant.
-    """
     pay_resource = None
     gen_ids = []
 
@@ -203,18 +163,16 @@ def detect_dominant_strategy(
     productions = {}
 
     for gen_id in gen_ids:
-        engine = PiecewiseEngine(game)
-        # Give enough starting cash and buy one unit of this generator
+        single_game = _make_single_gen_game(game, gen_id)
+        engine = PiecewiseEngine(single_game)
         gen = engine._generators[gen_id]
         first_cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, 0, 1)
         engine.set_balance(pay_resource, first_cost + 50.0)
         engine.purchase(gen_id, 1)
 
-        # Advance and auto-buy only this generator
         _auto_buy_single(engine, gen_id, simulation_time)
         productions[gen_id] = engine.get_production_rate(pay_resource)
 
-    # Find dominant
     sorted_gens = sorted(productions.items(), key=lambda x: x[1], reverse=True)
     best_gen, best_prod = sorted_gens[0]
     second_prod = sorted_gens[1][1] if len(sorted_gens) > 1 else 0
@@ -228,34 +186,22 @@ def detect_dominant_strategy(
     }
 
 
+def _make_single_gen_game(game: GameDefinition, gen_id: str) -> GameDefinition:
+    """Create a stripped game with only one generator for isolated analysis."""
+    resource_nodes = [n for n in game.nodes if n.type == "resource"]
+    gen_nodes = [n for n in game.nodes if n.type == "generator" and n.id == gen_id]
+    edges = [e for e in game.edges if e.source == gen_id]
+    return GameDefinition(
+        schema_version=game.schema_version,
+        name=f"{game.name}_single_{gen_id}",
+        nodes=resource_nodes + gen_nodes,
+        edges=edges,
+        stacking_groups={},
+    )
+
+
 def _auto_buy_single(engine: PiecewiseEngine, gen_id: str, target_time: float) -> None:
-    """Auto-buy a single generator type until target_time."""
-    pay_resource = engine._find_payment_resource()
-    safety = 0
-
-    while engine.time < target_time and safety < 5000:
-        gen = engine._generators[gen_id]
-        owned = engine.get_owned(gen_id)
-        cost = bulk_cost(gen.cost_base, gen.cost_growth_rate, owned, 1)
-        balance = engine.get_balance(pay_resource)
-        rate = engine.get_production_rate(pay_resource)
-
-        if balance >= cost - 1e-10:
-            engine.purchase(gen_id, 1)
-            safety += 1
-            continue
-
-        if rate <= 0:
-            break
-
-        wait = (cost - balance) / rate
-        purchase_time = engine.time + wait
-        if purchase_time > target_time:
-            break
-
-        engine.advance_to(min(purchase_time + 1e-6, target_time))
-        safety += 1
-
+    """Advance engine to target_time; engine auto-purchases as it goes."""
     engine.advance_to(target_time)
 
 
@@ -265,21 +211,9 @@ def run_sensitivity_analysis(
     perturbation_pcts: list[float],
     simulation_time: float = 300.0,
 ) -> list[dict]:
-    """Run sensitivity analysis by perturbing a parameter across all generators.
-
-    Args:
-        game: Base game definition
-        parameter: Generator attribute to perturb (e.g., "cost_base", "base_production")
-        perturbation_pcts: List of multipliers (e.g., [0.5, 1.0, 2.0])
-        simulation_time: How long to simulate each variant
-
-    Returns:
-        List of dicts with perturbation_pct, final_production, final_balance
-    """
     results = []
 
     for pct in perturbation_pcts:
-        # Deep copy and perturb
         perturbed = _perturb_game(game, parameter, pct)
         opt_result = _run_greedy(perturbed, simulation_time)
 
@@ -293,7 +227,6 @@ def run_sensitivity_analysis(
 
 
 def _perturb_game(game: GameDefinition, parameter: str, multiplier: float) -> GameDefinition:
-    """Create a copy of the game with a parameter perturbed on all generators."""
     game_copy = game.model_copy(deep=True)
 
     for node in game_copy.nodes:
@@ -309,7 +242,6 @@ def run_full_analysis(
     game: GameDefinition,
     simulation_time: float = 300.0,
 ) -> AnalysisReport:
-    """Run all analysis detectors and return a comprehensive report."""
     report = AnalysisReport(
         game_name=game.name,
         simulation_time=simulation_time,

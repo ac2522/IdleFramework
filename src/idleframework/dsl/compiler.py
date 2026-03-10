@@ -1,201 +1,283 @@
-"""Compile Lark parse trees to Python bytecode via ast.Expression.
+"""Compile Formula DSL to Python bytecode with AST whitelist security."""
 
-Security: AST node whitelist enforced before compile(). Only these nodes
-are permitted: BinOp, UnaryOp, Call, Name, Constant, Compare, IfExp.
-No Attribute, Subscript, or other nodes that enable sandbox escape.
-"""
 from __future__ import annotations
 
 import ast
 import math
 from typing import Any
 
-from lark import Token, Tree
-
+from idleframework.bigfloat import BigFloat
 from idleframework.dsl.parser import parse_formula as _parse
 
-MAX_DEPTH = 50
-MAX_EXPONENT_VALUE = 1e6  # Prevent astronomical exponents (DoS protection)
+# Maximum tree-to-AST recursion depth
+_MAX_DEPTH = 50
 
-# Whitelisted AST node types
-_ALLOWED_NODES = frozenset({
-    ast.Expression, ast.BinOp, ast.UnaryOp, ast.Call, ast.Name,
-    ast.Constant, ast.Compare, ast.IfExp, ast.Load,
-    # Operator nodes
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.USub,
-    ast.Gt, ast.GtE, ast.Lt, ast.LtE, ast.Eq, ast.NotEq,
+# AST node whitelist — only these node types are permitted in compiled formulas
+_ALLOWED_AST_NODES = frozenset({
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Call,
+    ast.Name,
+    ast.Constant,
+    ast.Compare,
+    ast.IfExp,
+    ast.Load,
+    # Operators
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Mod,
+    ast.Pow,
+    ast.USub,
+    # Comparisons
+    ast.Gt,
+    ast.GtE,
+    ast.Lt,
+    ast.LtE,
+    ast.Eq,
+    ast.NotEq,
 })
 
-def _safe_pow(base: float, exp: float) -> float:
-    """Exponentiation with DoS protection against huge exponents."""
-    if isinstance(exp, (int, float)) and abs(exp) > MAX_EXPONENT_VALUE:
-        raise ValueError(f"Exponent {exp} exceeds safe limit ({MAX_EXPONENT_VALUE})")
-    return base ** exp
+def _to_float(x: Any) -> float:
+    """Coerce BigFloat to float for math functions, pass through plain numbers."""
+    return float(x) if isinstance(x, BigFloat) else x
 
 
-# Safe builtins for evaluation
+def _bf_sqrt(x: Any) -> Any:
+    """BigFloat-aware sqrt: uses log10 decomposition to avoid float overflow."""
+    if isinstance(x, BigFloat):
+        # sqrt(m * 10^e) = sqrt(m) * 10^(e/2)
+        # For odd exponents: sqrt(m * 10) * 10^((e-1)/2)
+        if x.exponent % 2 == 0:
+            return BigFloat.from_components(
+                math.sqrt(x.mantissa), x.exponent // 2
+            )
+        else:
+            return BigFloat.from_components(
+                math.sqrt(x.mantissa * 10.0), (x.exponent - 1) // 2
+            )
+    return math.sqrt(x)
+
+
+def _bf_log10(x: Any) -> float:
+    """BigFloat-aware log10: uses BigFloat.log10() directly."""
+    if isinstance(x, BigFloat):
+        return x.log10()
+    return math.log10(x)
+
+
+def _bf_log(x: Any) -> float:
+    """BigFloat-aware natural log: log(m * 10^e) = ln(m) + e * ln(10)."""
+    if isinstance(x, BigFloat):
+        return math.log(x.mantissa) + x.exponent * math.log(10)
+    return math.log(x)
+
+
+# Safe builtins exposed to formulas
 _SAFE_BUILTINS: dict[str, Any] = {
-    "_safe_pow": _safe_pow,
-    "sqrt": math.sqrt,
-    "cbrt": lambda x: math.copysign(abs(x) ** (1 / 3), x),
-    "log": math.log,
-    "log10": math.log10,
-    "ln": math.log,
+    "sqrt": _bf_sqrt,
+    "cbrt": lambda x: x ** (1 / 3) if x >= 0 else -((-x) ** (1 / 3)),
+    "log": _bf_log,
+    "log10": _bf_log10,
+    "ln": _bf_log,
     "abs": abs,
     "min": min,
     "max": max,
-    "floor": math.floor,
-    "ceil": math.ceil,
-    "clamp": lambda val, lo, hi: max(lo, min(val, hi)),
-    "round": round,
-    "sum": lambda *args: sum(args) if args else 0,
-    "prod": lambda *args: math.prod(args) if args else 1,
-    "True": True,
-    "False": False,
+    "floor": lambda x: math.floor(_to_float(x)),
+    "ceil": lambda x: math.ceil(_to_float(x)),
+    "clamp": lambda x, lo, hi: max(lo, min(x, hi)),
+    "round": lambda x, *args: round(_to_float(x), *args),
+    "sum": lambda *args: sum(args),
+    "prod": lambda *args: math.prod(args),
+}
+
+# Comparison operator mapping
+_COMP_OPS = {
+    ">": ast.Gt,
+    ">=": ast.GtE,
+    "<": ast.Lt,
+    "<=": ast.LtE,
+    "==": ast.Eq,
+    "!=": ast.NotEq,
 }
 
 
 class CompiledFormula:
-    """A compiled formula ready for repeated evaluation."""
+    """A compiled formula ready for evaluation."""
 
-    __slots__ = ("_code", "_source")
+    __slots__ = ("code", "source")
 
-    def __init__(self, code: Any, source: str):
-        self._code = code
-        self._source = source
-
-    @property
-    def source(self) -> str:
-        return self._source
-
-
-def compile_formula(text: str) -> CompiledFormula:
-    """Parse and compile a formula string to Python bytecode."""
-    tree = _parse(text)
-    ast_node = _tree_to_ast(tree, depth=0)
-    expr = ast.Expression(body=ast_node)
-    ast.fix_missing_locations(expr)
-    _validate_whitelist(expr)
-    code = compile(expr, f"<formula: {text[:50]}>", "eval")
-    return CompiledFormula(code, text)
-
-
-def evaluate_formula(formula: CompiledFormula, variables: dict[str, float] | None = None) -> float:
-    """Evaluate a compiled formula with given variable bindings."""
-    ns = dict(_SAFE_BUILTINS)
-    if variables:
-        conflicts = set(variables) & set(_SAFE_BUILTINS)
-        if conflicts:
-            raise ValueError(f"Variable names conflict with builtins: {conflicts}")
-        ns.update(variables)
-    return eval(formula._code, {"__builtins__": {}}, ns)
+    def __init__(self, code: Any, source: str) -> None:
+        self.code = code
+        self.source = source
 
 
 def _validate_whitelist(node: ast.AST) -> None:
-    """Verify all AST nodes are in the whitelist. Raises ValueError if not."""
-    for child in ast.walk(node):
-        if type(child) not in _ALLOWED_NODES:
-            raise ValueError(
-                f"Disallowed AST node: {type(child).__name__}. "
-                f"Only {sorted(n.__name__ for n in _ALLOWED_NODES)} are permitted."
-            )
+    """Walk AST and reject any node type not in the whitelist."""
+    if type(node) not in _ALLOWED_AST_NODES:
+        raise ValueError(
+            f"Disallowed AST node: {type(node).__name__}. "
+            f"Only whitelisted nodes are permitted."
+        )
+    for child in ast.iter_child_nodes(node):
+        _validate_whitelist(child)
 
 
-def _tree_to_ast(tree: Tree | Token, depth: int) -> ast.expr:
-    """Convert Lark parse tree to Python AST."""
-    if depth > MAX_DEPTH:
-        raise ValueError(f"Formula exceeds maximum depth of {MAX_DEPTH}")
+def _tree_to_ast(tree, depth: int = 0) -> ast.expr:
+    """Convert a Lark parse tree to a Python AST expression node."""
+    if depth > _MAX_DEPTH:
+        raise ValueError(f"Depth limit ({_MAX_DEPTH}) exceeded — formula too deeply nested")
+
+    # Terminal tokens (when ?-rules inline the value)
+    from lark import Token, Tree
 
     if isinstance(tree, Token):
         if tree.type == "NUMBER":
-            return ast.Constant(value=float(tree))
+            value = float(tree) if ("." in tree or "e" in tree.lower()) else int(tree)
+            return ast.Constant(value=value)
         if tree.type == "NAME":
-            return ast.Name(id=str(tree), ctx=ast.Load())
-        raise ValueError(f"Unexpected token: {tree}")
+            name = str(tree)
+            if name.startswith("__") or name.endswith("__"):
+                raise ValueError(f"Dunder names are forbidden: {name}")
+            return ast.Name(id=name, ctx=ast.Load())
+        raise ValueError(f"Unexpected token type: {tree.type}")
 
-    d = depth + 1
+    if not isinstance(tree, Tree):
+        raise ValueError(f"Unexpected node: {tree!r}")
 
-    if tree.data == "start":
-        return _tree_to_ast(tree.children[0], d)
+    rule = tree.data
 
-    if tree.data == "number":
-        return ast.Constant(value=float(tree.children[0]))
+    if rule == "number":
+        return _tree_to_ast(tree.children[0], depth + 1)
 
-    if tree.data == "variable":
-        name = str(tree.children[0])
-        if name.startswith("__"):
-            raise ValueError(f"Dunder names forbidden: {name}")
+    if rule == "var":
+        token = tree.children[0]
+        name = str(token)
+        if name.startswith("__") or name.endswith("__"):
+            raise ValueError(f"Dunder names are forbidden: {name}")
         return ast.Name(id=name, ctx=ast.Load())
 
-    if tree.data == "neg":
-        return ast.UnaryOp(op=ast.USub(), operand=_tree_to_ast(tree.children[0], d))
-
-    # Power operator — rewritten to _safe_pow() call for DoS protection
-    if tree.data == "pow":
-        left = _tree_to_ast(tree.children[0], d)
-        right = _tree_to_ast(tree.children[1], d)
-        return ast.Call(
-            func=ast.Name(id="_safe_pow", ctx=ast.Load()),
-            args=[left, right],
-            keywords=[],
-        )
-
     # Binary operators
-    _binops = {
-        "add": ast.Add, "sub": ast.Sub, "mul": ast.Mult,
-        "div": ast.Div, "mod": ast.Mod,
+    _BIN_OPS = {
+        "add": ast.Add,
+        "sub": ast.Sub,
+        "mul": ast.Mult,
+        "div": ast.Div,
+        "mod": ast.Mod,
+        "pow": ast.Pow,
     }
-    if tree.data in _binops:
-        return ast.BinOp(
-            left=_tree_to_ast(tree.children[0], d),
-            op=_binops[tree.data](),
-            right=_tree_to_ast(tree.children[1], d),
-        )
+    if rule in _BIN_OPS:
+        left = _tree_to_ast(tree.children[0], depth + 1)
+        right = _tree_to_ast(tree.children[1], depth + 1)
+        return ast.BinOp(left=left, op=_BIN_OPS[rule](), right=right)
 
-    # Comparison
-    if tree.data == "comparison":
-        left = _tree_to_ast(tree.children[0], d)
-        op_str = str(tree.children[1])
-        right = _tree_to_ast(tree.children[2], d)
-        ops = {
-            ">": ast.Gt, ">=": ast.GtE, "<": ast.Lt, "<=": ast.LtE,
-            "==": ast.Eq, "!=": ast.NotEq,
-        }
-        return ast.Compare(left=left, ops=[ops[op_str]()], comparators=[right])
+    # Unary negation
+    if rule == "neg":
+        operand = _tree_to_ast(tree.children[0], depth + 1)
+        return ast.UnaryOp(op=ast.USub(), operand=operand)
+
+    # Comparisons
+    if rule == "comparison":
+        left = _tree_to_ast(tree.children[0], depth + 1)
+        op_token = str(tree.children[1])
+        right = _tree_to_ast(tree.children[2], depth + 1)
+        op_cls = _COMP_OPS[op_token]
+        return ast.Compare(left=left, ops=[op_cls()], comparators=[right])
 
     # Function calls
-    if tree.data == "func_call":
+    if rule == "func_call":
         func_name = str(tree.children[0])
-        if func_name.startswith("__"):
-            raise ValueError(f"Dunder function names forbidden: {func_name}")
-        if len(tree.children) > 1:
-            args_tree = tree.children[1]
-            args = [_tree_to_ast(c, d) for c in args_tree.children]
-        else:
-            args = []
+        if func_name.startswith("__") or func_name.endswith("__"):
+            raise ValueError(f"Dunder names are forbidden: {func_name}")
 
-        # Special handling for if() and piecewise()
-        if func_name == "if" and len(args) == 3:
+        args_tree = tree.children[1]  # arguments node
+        args = [_tree_to_ast(child, depth + 1) for child in args_tree.children]
+
+        # Special handling for if() -> ast.IfExp
+        if func_name == "if":
+            if len(args) != 3:
+                raise ValueError("if() requires exactly 3 arguments: condition, then, else")
             return ast.IfExp(test=args[0], body=args[1], orelse=args[2])
 
-        if func_name == "piecewise" and len(args) >= 3:
-            # Build nested IfExp: piecewise(c1,v1,c2,v2,...,default)
-            *pairs, default = args
-            if len(pairs) % 2 != 0:
-                raise ValueError("piecewise requires pairs of (condition, value) + default")
-            result = default
-            for i in range(len(pairs) - 2, -1, -2):
-                result = ast.IfExp(test=pairs[i], body=pairs[i + 1], orelse=result)
-            return result
+        # Special handling for piecewise() -> nested IfExp
+        if func_name == "piecewise":
+            if len(args) < 3 or len(args) % 2 == 0:
+                raise ValueError(
+                    "piecewise() requires odd number of args >= 3: "
+                    "cond1, val1, cond2, val2, ..., default"
+                )
+            return _build_piecewise(args)
 
+        # Regular function call
         return ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=args,
             keywords=[],
         )
 
-    # Fallthrough: try to process children
-    if len(tree.children) == 1:
-        return _tree_to_ast(tree.children[0], d)
+    # Parenthesized expression — counts toward nesting depth
+    if rule == "paren":
+        return _tree_to_ast(tree.children[0], depth + 1)
 
-    raise ValueError(f"Unhandled tree node: {tree.data}")
+    # arguments node — should not be reached directly
+    if rule == "arguments":
+        raise ValueError("arguments node should not be converted directly")
+
+    raise ValueError(f"Unhandled rule: {rule}")
+
+
+def _build_piecewise(args: list[ast.expr]) -> ast.IfExp:
+    """Build nested IfExp from piecewise arguments."""
+    # Base case: last arg is the default
+    if len(args) == 1:
+        return args[0]
+    # Recursive: if(cond, val, piecewise(rest...))
+    cond = args[0]
+    val = args[1]
+    rest = _build_piecewise(args[2:])
+    return ast.IfExp(test=cond, body=val, orelse=rest)
+
+
+def compile_formula(text: str) -> CompiledFormula:
+    """Parse, compile, and validate a formula string.
+
+    Returns a CompiledFormula with a compiled code object ready for eval().
+    """
+    # Parse with Lark
+    tree = _parse(text)
+
+    # Convert Lark tree to Python AST
+    expr_node = _tree_to_ast(tree, depth=0)
+
+    # Wrap in ast.Expression for compilation
+    module = ast.Expression(body=expr_node)
+    ast.fix_missing_locations(module)
+
+    # Validate AST whitelist
+    _validate_whitelist(module)
+
+    # Compile to bytecode
+    code = compile(module, f"<formula: {text}>", "eval")
+
+    return CompiledFormula(code=code, source=text)
+
+
+def evaluate_formula(
+    formula: CompiledFormula,
+    variables: dict[str, Any] | None = None,
+) -> Any:
+    """Evaluate a compiled formula with the given variables.
+
+    Uses restricted builtins — no access to __builtins__, __import__, etc.
+    """
+    namespace: dict[str, Any] = {"__builtins__": {}}
+    namespace.update(_SAFE_BUILTINS)
+    if variables:
+        for name in variables:
+            if name.startswith("__") or name.endswith("__"):
+                raise ValueError(f"Dunder names are forbidden: {name}")
+        namespace.update(variables)
+
+    return eval(formula.code, namespace)

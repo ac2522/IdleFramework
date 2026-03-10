@@ -1,7 +1,4 @@
-"""IdleFramework CLI — validate, analyze, report, compare, export.
-
-Entry point: `idleframework <command> <args>`
-"""
+"""IdleFramework CLI — validate, analyze, report, compare, export."""
 from __future__ import annotations
 
 import json
@@ -15,7 +12,6 @@ app = typer.Typer(name="idleframework", help="Idle game balance analysis framewo
 
 
 def _load_game(game_file: str) -> GameDefinition:
-    """Load and validate a game JSON file. Raises typer.Exit on error."""
     path = Path(game_file)
     if not path.exists():
         typer.echo(f"Error: File not found: {game_file}")
@@ -38,7 +34,6 @@ def _load_game(game_file: str) -> GameDefinition:
 
 @app.command()
 def validate(game_file: str) -> None:
-    """Validate a game definition JSON file."""
     game = _load_game(game_file)
     typer.echo(f"Valid game definition: {game.name}")
     typer.echo(f"  Nodes: {len(game.nodes)}")
@@ -48,7 +43,6 @@ def validate(game_file: str) -> None:
 
 @app.command()
 def analyze(game_file: str, time: float = 300.0) -> None:
-    """Run full balance analysis on a game definition."""
     game = _load_game(game_file)
 
     from idleframework.analysis.detectors import run_full_analysis
@@ -59,24 +53,20 @@ def analyze(game_file: str, time: float = 300.0) -> None:
     typer.echo(f"\n=== Analysis Report: {report.game_name} ===")
     typer.echo(f"Simulation time: {report.simulation_time}s")
 
-    # Dead upgrades
     typer.echo(f"\nDead upgrades: {len(report.dead_upgrades)}")
     for du in report.dead_upgrades:
         typer.echo(f"  - {du['upgrade_id']}: {du['reason']}")
 
-    # Progression walls
     typer.echo(f"\nProgression walls: {len(report.progression_walls)}")
     for pw in report.progression_walls:
         typer.echo(f"  - {pw['reason']}")
 
-    # Dominant strategy
     if report.dominant_strategy and report.dominant_strategy.get("dominant_gen"):
         typer.echo(f"\nDominant strategy: {report.dominant_strategy['dominant_gen']} "
                    f"(ratio: {report.dominant_strategy['ratio']:.1f}x)")
     else:
         typer.echo("\nNo dominant strategy detected.")
 
-    # Optimizer result
     if report.optimizer_result:
         opt = report.optimizer_result
         typer.echo("\nOptimizer result:")
@@ -92,7 +82,6 @@ def report(
     cdn: bool = True,
     time: float = 300.0,
 ) -> None:
-    """Generate an HTML analysis report."""
     game = _load_game(game_file)
 
     from idleframework.analysis.detectors import run_full_analysis
@@ -106,7 +95,6 @@ def report(
 
 
 def _generate_html_report(report, cdn: bool = True) -> str:
-    """Generate a simple HTML report from an AnalysisReport."""
     opt = report.optimizer_result
 
     purchases_html = ""
@@ -181,19 +169,12 @@ def compare(
     strategies: str = "free,paid",
     time: float = 300.0,
 ) -> None:
-    """Compare strategies by including/excluding tagged upgrades.
-
-    --strategies is a comma-separated list of tag names. For each tag,
-    analysis is run once with all upgrades (baseline) and once excluding
-    upgrades with that tag.
-    """
     game = _load_game(game_file)
 
     from idleframework.analysis.detectors import run_full_analysis
 
     tags = [t.strip() for t in strategies.split(",")]
 
-    # Baseline: all upgrades
     typer.echo(f"Running baseline analysis for '{game.name}'...")
     baseline = run_full_analysis(game, simulation_time=time)
     baseline_prod = baseline.optimizer_result.final_production if baseline.optimizer_result else 0
@@ -202,7 +183,6 @@ def compare(
     typer.echo(f"Baseline (all upgrades): {baseline_prod:.2e}/s")
 
     for tag in tags:
-        # Create a variant excluding upgrades with this tag
         variant = _exclude_tag(game, tag)
         variant_report = run_full_analysis(variant, simulation_time=time)
         variant_prod = variant_report.optimizer_result.final_production if variant_report.optimizer_result else 0
@@ -215,7 +195,6 @@ def compare(
 
 
 def _exclude_tag(game: GameDefinition, tag: str) -> GameDefinition:
-    """Create a copy of the game excluding upgrades with a given tag."""
     game_copy = game.model_copy(deep=True)
     excluded_ids = set()
 
@@ -227,7 +206,6 @@ def _exclude_tag(game: GameDefinition, tag: str) -> GameDefinition:
             filtered_nodes.append(node)
 
     game_copy.nodes = filtered_nodes
-    # Also filter edges referencing excluded nodes
     game_copy.edges = [e for e in game_copy.edges if e.source not in excluded_ids and e.target not in excluded_ids]
 
     return game_copy
@@ -238,7 +216,6 @@ def export_cmd(
     game_file: str,
     format: str = "yaml",
 ) -> None:
-    """Export a game definition to YAML or XML format."""
     game = _load_game(game_file)
 
     from idleframework.export import to_yaml, to_xml

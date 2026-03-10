@@ -1,10 +1,4 @@
-"""Tests for the beam search optimizer.
-
-The beam search optimizer maintains top-K states at each step,
-exploring multiple purchase paths in parallel. This lets it find
-solutions where a locally suboptimal purchase (e.g., an expensive
-multiplier) leads to globally better production.
-"""
+"""Tests for the beam search optimizer."""
 import json
 import pytest
 from pathlib import Path
@@ -15,7 +9,6 @@ from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 
 def _make_two_gen_game():
-    """Two generators with different efficiency profiles."""
     return GameDefinition(
         schema_version="1.0",
         name="BeamTest",
@@ -37,18 +30,6 @@ def _make_two_gen_game():
 
 
 def _make_multiplicative_trap_game():
-    """Game where greedy buys cheap generators but beam should buy the x10 upgrade first.
-
-    The x10 upgrade costs 500 and multiplies all production by 10.
-    Cheap generators cost 5 each and produce 1/s.
-    Greedy sees generator efficiency = 1/5 = 0.2 vs upgrade efficiency (with 1 gen) = 1*(10-1)/500 = 0.018.
-    So greedy buys many cheap gens first.
-
-    But with enough starting cash, buying the x10 upgrade first and then generators
-    gives 10x production on every subsequent generator, which compounds to much more.
-
-    We give enough starting cash + production time for this to matter.
-    """
     return GameDefinition(
         schema_version="1.0",
         name="MultTrap",
@@ -70,7 +51,6 @@ def _make_multiplicative_trap_game():
 
 class TestBeamExploresAlternatives:
     def test_beam_explores_alternatives(self):
-        """Beam width > 1 should explore non-greedy paths."""
         game = _make_two_gen_game()
         engine = PiecewiseEngine(game)
         engine.set_balance("cash", 600.0)
@@ -79,16 +59,13 @@ class TestBeamExploresAlternatives:
         optimizer = BeamSearchOptimizer(engine, beam_width=3)
         result = optimizer.optimize(target_time=60.0, max_steps=10)
 
-        # With beam_width=3, we should have explored multiple paths
         assert isinstance(result, OptimizeResult)
         assert len(result.purchases) > 0
-        # At minimum, the beam should have made multiple purchases
         assert len(result.purchases) >= 2
 
 
 class TestBeamDeterministic:
     def test_beam_deterministic(self):
-        """Same input should produce identical output."""
         game = _make_two_gen_game()
 
         results = []
@@ -99,7 +76,6 @@ class TestBeamDeterministic:
             optimizer = BeamSearchOptimizer(engine, beam_width=5)
             results.append(optimizer.optimize(target_time=60.0, max_steps=20))
 
-        # All runs should produce identical purchase sequences
         for r in results[1:]:
             assert len(r.purchases) == len(results[0].purchases)
             for p1, p2 in zip(results[0].purchases, r.purchases):
@@ -110,40 +86,25 @@ class TestBeamDeterministic:
 
 class TestBeamBeatsGreedyOnMultiplicative:
     def test_beam_beats_greedy_on_multiplicative(self):
-        """Beam search should beat greedy when an expensive multiplier is better long-term.
-
-        Setup: 10 workers producing 1/s each = 10/s total.
-        Starting cash: 600 (enough for the x10 upgrade at cost 500, or ~12 more workers).
-        Time horizon: 600s.
-
-        Greedy will buy cheap workers first (efficiency 1/5.25 > 10*9/500 = 0.18 with 10 gens).
-        But buying the x10 first makes each worker produce 10/s, so all future production
-        is 10x higher. Over 600s this compounds to much more total production.
-        """
         game = _make_multiplicative_trap_game()
 
-        # Run greedy
         engine_greedy = PiecewiseEngine(game)
         engine_greedy.set_owned("worker", 10)
         engine_greedy.set_balance("cash", 600.0)
-        greedy = GreedyOptimizer(engine_greedy)
+        greedy = GreedyOptimizer(game, engine_greedy.state)
         greedy_result = greedy.optimize(target_time=600.0, max_steps=100)
 
-        # Run beam with wide beam
         engine_beam = PiecewiseEngine(game)
         engine_beam.set_owned("worker", 10)
         engine_beam.set_balance("cash", 600.0)
         beam = BeamSearchOptimizer(engine_beam, beam_width=10)
         beam_result = beam.optimize(target_time=600.0, max_steps=100)
 
-        # Beam should achieve at least as good production as greedy
-        # In this scenario, beam should find the upgrade-first path
         assert beam_result.final_production >= greedy_result.final_production * 0.99
 
 
 class TestBeamWidthParameter:
     def test_beam_width_parameter(self):
-        """Wider beam should produce equal or better result."""
         game = _make_multiplicative_trap_game()
 
         results = {}
@@ -154,8 +115,6 @@ class TestBeamWidthParameter:
             optimizer = BeamSearchOptimizer(engine, beam_width=width)
             results[width] = optimizer.optimize(target_time=600.0, max_steps=100)
 
-        # Wider beam should produce equal or better final production
-        # (with some tolerance for floating-point)
         for narrow, wide in [(1, 3), (3, 5), (5, 10)]:
             assert results[wide].final_production >= results[narrow].final_production * 0.99, (
                 f"beam_width={wide} ({results[wide].final_production:.2f}) should be >= "
@@ -165,7 +124,6 @@ class TestBeamWidthParameter:
 
 class TestBeamOnMiniCap:
     def test_beam_on_minicap(self):
-        """Beam search should work on the MiniCap fixture."""
         fixture_path = Path(__file__).parent / "fixtures" / "minicap.json"
         with open(fixture_path) as f:
             data = json.load(f)
@@ -185,7 +143,6 @@ class TestBeamOnMiniCap:
 
 class TestBeamRespectsMaxSteps:
     def test_beam_respects_max_steps(self):
-        """Beam optimizer should stop after max_steps purchases."""
         game = _make_two_gen_game()
         engine = PiecewiseEngine(game)
         engine.set_balance("cash", 1e10)

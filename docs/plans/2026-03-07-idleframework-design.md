@@ -553,11 +553,11 @@ The visual node editor. Not required — everything works via CLI and library.
 
 ## Key Design Decisions
 
-1. **Math-first, not simulation-first.** The core product computes answers via closed-form solutions and piecewise analytical methods. Simulation exists only for test validation. SciPy is a test-only dependency.
+1. **Math-first, not simulation-first.** The core product computes answers via closed-form solutions and piecewise analytical methods. Simulation exists only for test validation. SciPy is a production dependency for matrix exponentials and root-finding. mpmath and SymPy are test-only.
 
 2. **Piecewise analytical architecture.** The game timeline is segmented at discrete events (purchases, prestiges, unlocks). Within each segment, the math engine solves analytically.
 
-3. **BigFloat over `decimal.Decimal`.** 36x faster for the actual optimizer workload (pow/log-dominated). Numba-compatible, NumPy-compatible, no overflow at any scale. Cython-accelerable if needed.
+3. **BigFloat over `decimal.Decimal`.** 36x faster for the actual optimizer workload (pow/log-dominated). NumPy-implementable, Cython-accelerable, no overflow at any scale. Cython-accelerable if needed.
 
 4. **Resource flow vs state influence.** Following Machinations' proven approach, the graph model separates resource edges (resources move) from state edges (values modify parameters). This distinction reflects fundamentally different computational semantics.
 
