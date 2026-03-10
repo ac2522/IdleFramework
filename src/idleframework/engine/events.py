@@ -8,6 +8,7 @@ is fixed and solvable analytically.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from enum import Enum, auto
 
 
@@ -29,6 +30,19 @@ class ChatteringError(Exception):
     """
 
     pass
+
+
+@dataclass
+class PurchaseEvent:
+    """A purchase event in the simulation timeline."""
+
+    time: float
+    node_id: str
+    count: int
+    cost: float
+
+    def __lt__(self, other: PurchaseEvent) -> bool:
+        return self.time < other.time
 
 
 # Maximum purchases allowed in a single epsilon window before chattering kicks in

@@ -10,7 +10,7 @@ most efficient next candidate. Efficiency formulas:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from idleframework.bigfloat import BigFloat
@@ -33,6 +33,17 @@ class PurchaseStep:
     efficiency: float
     cash_before: float
     cash_after: float
+
+
+@dataclass
+class OptimizeResult:
+    """Result from any optimizer run."""
+
+    purchases: list = field(default_factory=list)
+    timeline: list[dict] = field(default_factory=list)
+    final_production: float = 0.0
+    final_balance: float = 0.0
+    final_time: float = 0.0
 
 
 class GreedyOptimizer:
@@ -254,3 +265,92 @@ class GreedyOptimizer:
 
         self.steps.extend(steps)
         return steps
+
+    def get_candidates(self) -> list[dict]:
+        """Get all purchasable candidates with their efficiency metrics.
+
+        Returns list of dicts with keys: node_id, type, cost, efficiency,
+        delta_production. Used by beam/MCTS/BnB optimizers.
+        """
+        candidates: list[dict] = []
+        gen_multipliers = self.engine._compute_generator_multipliers()
+
+        for node in self.game.nodes:
+            if isinstance(node, Generator):
+                ns = self.engine.state.get(node.id)
+                cost_bf = bulk_purchase_cost(
+                    BigFloat(node.cost_base),
+                    BigFloat(node.cost_growth_rate),
+                    ns.owned,
+                    1,
+                )
+                cost = float(cost_bf)
+                if cost <= 0:
+                    continue
+                gen_mult = gen_multipliers.get(node.id, 1.0)
+                delta_prod = node.base_production / node.cycle_time * gen_mult
+                eff = delta_prod / cost
+                candidates.append({
+                    "node_id": node.id,
+                    "type": "generator",
+                    "cost": cost,
+                    "efficiency": eff,
+                    "delta_production": delta_prod,
+                })
+
+            elif isinstance(node, Upgrade):
+                ns = self.engine.state.get(node.id)
+                if ns.purchased:
+                    continue
+                cost = node.cost
+                if cost <= 0:
+                    cost = 0.0
+                eff = self.compute_upgrade_efficiency(node.id)
+                delta_prod = self.engine._estimate_upgrade_delta(node, gen_multipliers)
+                candidates.append({
+                    "node_id": node.id,
+                    "type": "upgrade",
+                    "cost": cost,
+                    "efficiency": eff,
+                    "delta_production": delta_prod,
+                })
+
+        return candidates
+
+    def optimize(
+        self,
+        target_time: float,
+        max_steps: int = 500,
+    ) -> OptimizeResult:
+        """Run greedy optimization and return an OptimizeResult.
+
+        This wraps ``run()`` to produce the result format expected by
+        beam/MCTS/BnB optimizers and the analysis module.
+        """
+        from idleframework.engine.events import PurchaseEvent
+
+        steps = self.run(target_time=target_time, max_steps=max_steps)
+
+        purchases = []
+        timeline = []
+        pay_resource = self.engine._get_primary_resource_id()
+
+        for step in steps:
+            purchases.append(PurchaseEvent(
+                time=step.time,
+                node_id=step.node_id,
+                count=1,
+                cost=step.cost,
+            ))
+            timeline.append({
+                "time": step.time,
+                "production_rate": self.engine.get_production_rate(pay_resource) if pay_resource else 0.0,
+            })
+
+        return OptimizeResult(
+            purchases=purchases,
+            timeline=timeline,
+            final_production=self.engine.get_production_rate(pay_resource) if pay_resource else 0.0,
+            final_balance=self.engine.get_balance(pay_resource) if pay_resource else 0.0,
+            final_time=self.engine.current_time,
+        )

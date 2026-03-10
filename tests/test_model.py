@@ -329,7 +329,6 @@ class TestGameDefinition:
         assert g.description is None
 
     def test_description_field(self):
-        from idleframework.model.edges import Edge
         from idleframework.model.game import GameDefinition
         from idleframework.model.nodes import Resource
 

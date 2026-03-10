@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 import pytest
 
 from idleframework.model.game import GameDefinition
-from idleframework.model.state import GameState, NodeState
+from idleframework.model.state import GameState
 from idleframework.optimizer.greedy import GreedyOptimizer, PurchaseStep
 
 
@@ -271,7 +269,7 @@ class TestGreedyConstraints:
         opt = GreedyOptimizer(game, state)
 
         prev_rate = opt.total_production_rate()
-        steps = opt.run(target_time=10000.0, max_steps=10)
+        opt.run(target_time=10000.0, max_steps=10)
 
         # After the full run, production should be higher than initial
         final_rate = opt.total_production_rate()

@@ -345,3 +345,13 @@ def efficiency_score(delta_production: BigFloat, cost: BigFloat) -> float:
     if cost._is_zero():
         return float("inf") if not delta_production._is_zero() else 0.0
     return float(delta_production / cost)
+
+
+# -- Aliases for optimizer compatibility ------------------------------------
+
+def bulk_cost(
+    base: float, rate: float, owned: int, count: int
+) -> float:
+    """Plain-float wrapper around bulk_purchase_cost for optimizer use."""
+    result = bulk_purchase_cost(BigFloat(base), BigFloat(rate), owned, count)
+    return float(result)

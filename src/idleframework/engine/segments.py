@@ -16,10 +16,8 @@ from idleframework.bigfloat import BigFloat
 from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
 from idleframework.engine.solvers import (
     bulk_purchase_cost,
-    efficiency_score,
-    time_to_afford,
 )
-from idleframework.model.nodes import Generator, Resource, Upgrade
+from idleframework.model.nodes import Generator, PrestigeLayer, Register, Resource, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -45,11 +43,31 @@ class PiecewiseEngine:
     segment analytically using closed-form solutions.
     """
 
-    def __init__(self, game: "GameDefinition", state: GameState | None = None):
+    def __init__(
+        self,
+        game: "GameDefinition",
+        state: GameState | None = None,
+        validate: bool = False,
+    ):
+        if validate:
+            from idleframework.graph.validation import validate_graph
+            errors = validate_graph(game)
+            if errors:
+                raise ValueError(f"Graph validation errors: {errors}")
+
         self._game = game
         self._state = state if state is not None else GameState.from_game(game)
         self._segments: list[Segment] = []
         self._time: float = self._state.elapsed_time
+
+        # Build lookup tables for convenience
+        self._generators: dict[str, Generator] = {}
+        self._upgrades: dict[str, Upgrade] = {}
+        for node in self._game.nodes:
+            if isinstance(node, Generator):
+                self._generators[node.id] = node
+            elif isinstance(node, Upgrade):
+                self._upgrades[node.id] = node
 
     # -- Properties ----------------------------------------------------------
 
@@ -64,6 +82,36 @@ class PiecewiseEngine:
     @property
     def segments(self) -> list[Segment]:
         return list(self._segments)
+
+    @property
+    def time(self) -> float:
+        return self._time
+
+    # -- Convenience accessors -----------------------------------------------
+
+    def set_balance(self, resource_id: str, value: float) -> None:
+        """Set the current balance of a resource."""
+        self._state.get(resource_id).current_value = value
+
+    def set_owned(self, node_id: str, count: int) -> None:
+        """Set how many of a node are owned."""
+        self._state.get(node_id).owned = count
+
+    def get_balance(self, resource_id: str) -> float:
+        """Get the current balance of a resource."""
+        return self._state.get(resource_id).current_value
+
+    def get_owned(self, node_id: str) -> int:
+        """Get how many of a node are owned."""
+        return self._state.get(node_id).owned
+
+    def get_production_rate(self, resource_id: str) -> float:
+        """Get current production rate for a single resource."""
+        return self.compute_production_rates().get(resource_id, 0.0)
+
+    def is_upgrade_owned(self, upgrade_id: str) -> bool:
+        """Check if an upgrade has been purchased."""
+        return self._state.get(upgrade_id).purchased
 
     # -- Production rates ----------------------------------------------------
 
@@ -326,44 +374,96 @@ class PiecewiseEngine:
 
     # -- Purchases -----------------------------------------------------------
 
-    def purchase(self, node_id: str) -> None:
+    def purchase(self, node_id: str, count: int = 1) -> float:
         """Execute a purchase: deduct cost, update owned/purchased.
 
+        For generators, buys ``count`` units. For upgrades, count is ignored.
+        Returns the total cost paid.
         Raises ValueError if the currency balance is insufficient.
         """
         node = self._game.get_node(node_id)
         ns = self._state.get(node_id)
         currency_id = self._get_currency_resource_id_for(node_id)
+        total_cost = 0.0
 
         if isinstance(node, Generator):
             cost_bf = bulk_purchase_cost(
                 BigFloat(node.cost_base),
                 BigFloat(node.cost_growth_rate),
                 ns.owned,
-                1,
+                count,
             )
             cost = float(cost_bf)
             if currency_id:
                 balance = self._state.get(currency_id).current_value
-                if balance < cost - 1e-9:
+                tol = max(1e-4, abs(cost) * 1e-9)
+                if balance < cost - tol:
                     raise ValueError(
                         f"Insufficient balance to purchase {node_id!r}: "
                         f"need {cost:.2f}, have {balance:.2f}"
                     )
-                self._state.get(currency_id).current_value -= cost
-            ns.owned += 1
+                # Clamp: if within tolerance, treat as exact
+                if balance < cost:
+                    self._state.get(currency_id).current_value = 0.0
+                else:
+                    self._state.get(currency_id).current_value -= cost
+            ns.owned += count
+            total_cost = cost
 
         elif isinstance(node, Upgrade):
+            if ns.purchased:
+                raise ValueError(f"Already purchased upgrade {node_id!r}")
             cost = node.cost
             if currency_id and cost > 0:
                 balance = self._state.get(currency_id).current_value
-                if balance < cost - 1e-9:
+                tol = max(1e-4, abs(cost) * 1e-9)
+                if balance < cost - tol:
                     raise ValueError(
-                        f"Insufficient balance to purchase {node_id!r}: "
+                        f"Cannot afford upgrade {node_id!r}: "
                         f"need {cost:.2f}, have {balance:.2f}"
                     )
-                self._state.get(currency_id).current_value -= cost
+                if balance < cost:
+                    self._state.get(currency_id).current_value = 0.0
+                else:
+                    self._state.get(currency_id).current_value -= cost
             ns.purchased = True
+            total_cost = cost
+
+        return total_cost
+
+    def purchase_upgrade(self, upgrade_id: str) -> float:
+        """Purchase an upgrade by ID. Returns cost paid."""
+        return self.purchase(upgrade_id)
+
+    def evaluate_prestige(self, prestige_id: str, **kwargs: float) -> float:
+        """Evaluate a prestige layer's formula with given variables."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+
+        node = self._game.get_node(prestige_id)
+        if not isinstance(node, PrestigeLayer):
+            raise ValueError(f"{prestige_id!r} is not a PrestigeLayer")
+        compiled = compile_formula(node.formula_expr)
+        return float(evaluate_formula(compiled, kwargs))
+
+    def evaluate_register(self, register_id: str, variables: dict[str, float]) -> float:
+        """Evaluate a register node's formula with given variables."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+
+        node = self._game.get_node(register_id)
+        if not isinstance(node, Register):
+            raise ValueError(f"{register_id!r} is not a Register")
+        compiled = compile_formula(node.formula_expr)
+        return float(evaluate_formula(compiled, variables))
+
+    def auto_advance(self, target_time: float) -> list[str]:
+        """Advance to target_time with auto-purchasing. Returns list of purchased node IDs."""
+        purchased: list[str] = []
+        segs = self.advance_to(target_time)
+        for seg in segs:
+            for event in seg.events:
+                if event.startswith("purchase:"):
+                    purchased.append(event.split(":", 1)[1])
+        return purchased
 
     def apply_free_purchases(self) -> list[str]:
         """Auto-purchase items where cost/balance < free_purchase_threshold.
@@ -463,6 +563,10 @@ class PiecewiseEngine:
                 self._accumulate(rates, dt)
                 self._time = purchase_time
 
+                # Fix floating-point drift: ensure balance covers the purchase
+                # we computed we could afford (time_to_afford said so)
+                self._ensure_can_afford(node_id)
+
                 # Handle chattering: count purchases in this epsilon window
                 purchases_in_window = 0
                 window_start = self._time
@@ -472,8 +576,11 @@ class PiecewiseEngine:
                     free = self.apply_free_purchases()
                     purchases_in_window += len(free)
 
-                    # Execute the purchase
-                    self.purchase(node_id)
+                    # Execute the purchase (may fail if free purchases spent the balance)
+                    try:
+                        self.purchase(node_id)
+                    except ValueError:
+                        break
                     purchases_in_window += 1
 
                     # Check chattering
@@ -536,6 +643,26 @@ class PiecewiseEngine:
                 self._state.lifetime_earnings[resource_id] += earned
             else:
                 self._state.lifetime_earnings[resource_id] = earned
+
+    def _ensure_can_afford(self, node_id: str) -> None:
+        """Nudge balance up if floating-point drift left us barely short."""
+        currency_id = self._get_primary_resource_id()
+        if currency_id is None:
+            return
+        if node_id in self._generators:
+            gen = self._generators[node_id]
+            ns = self._state.get(node_id)
+            cost = float(bulk_purchase_cost(
+                BigFloat(gen.cost_base), BigFloat(gen.cost_growth_rate),
+                ns.owned, 1,
+            ))
+        elif node_id in self._upgrades:
+            cost = self._upgrades[node_id].cost
+        else:
+            return
+        balance = self._state.get(currency_id).current_value
+        if balance < cost and balance >= cost * (1 - 1e-6) - 1e-6:
+            self._state.get(currency_id).current_value = cost
 
     def _batch_purchase_all_affordable(self) -> None:
         """Batch-purchase all currently affordable items.

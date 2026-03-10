@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 import networkx as nx
 
-from idleframework.model.edges import Edge
 from idleframework.model.game import GameDefinition
 from idleframework.model.nodes import Generator, NestedGenerator, Upgrade
 

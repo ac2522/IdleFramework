@@ -5,19 +5,15 @@ TDD-first: these tests are written before the implementation.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 import pytest
 
 from idleframework.engine.events import (
-    ChatteringError,
-    EventType,
     classify_formula_tier,
 )
-from idleframework.engine.segments import PiecewiseEngine, Segment
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.model.game import GameDefinition
-from idleframework.model.state import GameState, NodeState
+from idleframework.model.state import GameState
 from simulator import simulate_constant_production
 
 
@@ -217,7 +213,7 @@ class TestChatteringDetection:
         # Should NOT raise but handle chattering (batch-evaluate)
         # Or raise ChatteringError — either approach is valid
         # We just verify the engine doesn't loop forever
-        segments = engine.advance_to(1.0)
+        engine.advance_to(1.0)
         # If chattering was detected, engine should still complete
         assert engine.current_time == pytest.approx(1.0, abs=0.01)
 

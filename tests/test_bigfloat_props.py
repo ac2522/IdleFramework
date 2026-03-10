@@ -1,6 +1,5 @@
 """Property-based tests for BigFloat using Hypothesis."""
 
-import math
 import pytest
 from hypothesis import given, assume, settings
 from hypothesis.strategies import floats, integers, composite
