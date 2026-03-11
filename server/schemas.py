@@ -29,7 +29,7 @@ class GameCreateResponse(BaseModel):
 
 class AnalysisRequest(BaseModel):
     game_id: str
-    simulation_time: float = 300.0
+    simulation_time: float = Field(default=300.0, gt=0, le=86400)
     optimizer: Literal["greedy", "beam", "mcts", "bnb"] = "greedy"
     beam_width: int = 100
     mcts_iterations: int = 1000
@@ -41,12 +41,12 @@ class AnalysisRequest(BaseModel):
 class CompareRequest(BaseModel):
     game_id: str
     strategies: list[str] = ["free", "paid"]
-    simulation_time: float = 300.0
+    simulation_time: float = Field(default=300.0, gt=0, le=86400)
 
 
 class ReportRequest(BaseModel):
     game_id: str
-    simulation_time: float = 300.0
+    simulation_time: float = Field(default=300.0, gt=0, le=86400)
     use_cdn: bool = True
 
 
@@ -67,9 +67,9 @@ class PurchaseRequest(BaseModel):
 
 
 class AutoOptimizeRequest(BaseModel):
-    target_time: float = 300.0
+    target_time: float = Field(default=300.0, gt=0, le=86400)
     optimizer: Literal["greedy", "beam", "mcts", "bnb"] = "greedy"
-    max_steps: int = 500
+    max_steps: int = Field(default=500, ge=1, le=10000)
 
 
 class ResourceState(BaseModel):
