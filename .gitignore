@@ -7,3 +7,6 @@ build/
 .venv/
 *.egg
 .hypothesis/constants/
+frontend/node_modules/
+frontend/dist/
+server/games/user/
