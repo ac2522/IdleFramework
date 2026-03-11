@@ -14,6 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { editorEdgeTypes } from '../editor/edges'
+import { editorNodeTypes } from '../editor/nodes'
 
 function EditorCanvas() {
   const [nodes, , onNodesChange] = useNodesState<Node>([])
@@ -42,6 +43,7 @@ function EditorCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          nodeTypes={editorNodeTypes}
           edgeTypes={editorEdgeTypes}
           fitView
         >
