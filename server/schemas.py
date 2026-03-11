@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # -- Games --
@@ -54,16 +54,16 @@ class ReportRequest(BaseModel):
 
 class StartSessionRequest(BaseModel):
     game_id: str
-    initial_balance: float = 50.0
+    initial_balance: float = Field(default=50.0, gt=0, le=1e15)
 
 
 class AdvanceRequest(BaseModel):
-    seconds: float = 1.0
+    seconds: float = Field(default=1.0, gt=0, le=86400)
 
 
 class PurchaseRequest(BaseModel):
     node_id: str
-    count: int = 1
+    count: int = Field(default=1, ge=1, le=1000)
 
 
 class AutoOptimizeRequest(BaseModel):

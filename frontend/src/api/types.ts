@@ -70,6 +70,7 @@ export interface AnalysisResult {
   dead_upgrades: Array<{ upgrade_id: string; reason: string; cost?: number }>
   progression_walls: Array<{ reason: string; severity?: string }>
   dominant_strategy: { dominant_gen: string | null; ratio: number; productions: Record<string, number> } | null
+  sensitivity: Array<{ perturbation_pct: number; final_production: number; final_balance: number }>
   optimizer_result: {
     purchases: PurchaseStep[]
     timeline: TimelineEntry[]

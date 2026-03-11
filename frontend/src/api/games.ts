@@ -14,5 +14,5 @@ export async function createGame(gameJson: Record<string, unknown>): Promise<{ i
 }
 
 export async function deleteGame(gameId: string): Promise<void> {
-  await fetch(`/api/v1/games/${gameId}`, { method: 'DELETE' })
+  await apiFetch(`/games/${gameId}`, { method: 'DELETE' })
 }

@@ -16,6 +16,14 @@ def _slugify(name: str) -> str:
     return slug.strip("-")
 
 
+def _validate_game_id(game_id: str) -> str:
+    """Sanitize game_id to prevent path traversal."""
+    sanitized = _slugify(game_id)
+    if not sanitized:
+        raise ValueError(f"Invalid game ID: {game_id!r}")
+    return sanitized
+
+
 class GameStore:
     """Manages game definitions on disk."""
 
@@ -52,14 +60,16 @@ class GameStore:
 
     def get_game(self, game_id: str) -> GameDefinition | None:
         """Load a game by ID."""
+        safe_id = _validate_game_id(game_id)
         for d in [self._bundled_dir, self._user_dir]:
-            path = d / f"{game_id}.json"
+            path = d / f"{safe_id}.json"
             if path.exists():
                 return self._load_file(path)
         return None
 
     def is_bundled(self, game_id: str) -> bool:
-        return (self._bundled_dir / f"{game_id}.json").exists()
+        safe_id = _validate_game_id(game_id)
+        return (self._bundled_dir / f"{safe_id}.json").exists()
 
     def save_game(self, game: GameDefinition) -> str:
         """Save a user game. Returns the game ID."""
@@ -70,7 +80,8 @@ class GameStore:
 
     def delete_game(self, game_id: str) -> bool:
         """Delete a user game. Returns True if deleted."""
-        path = self._user_dir / f"{game_id}.json"
+        safe_id = _validate_game_id(game_id)
+        path = self._user_dir / f"{safe_id}.json"
         if path.exists():
             path.unlink()
             return True

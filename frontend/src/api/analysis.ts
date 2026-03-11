@@ -26,5 +26,8 @@ export async function generateReport(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
+  if (!res.ok) {
+    throw new Error(`Report generation failed: ${res.status} ${res.statusText}`)
+  }
   return res.text()
 }

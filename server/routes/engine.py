@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Response
 
 from idleframework.bigfloat import BigFloat
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_purchase_cost
 from idleframework.model.nodes import Achievement, Generator, PrestigeLayer, Resource, Upgrade
 from idleframework.optimizer.greedy import GreedyOptimizer
@@ -128,10 +129,7 @@ def get_state(session_id: str):
 def advance(session_id: str, req: AdvanceRequest):
     session = _get_session_or_404(session_id)
     engine = session.engine
-    rates = engine.compute_production_rates()
-    engine._accumulate(rates, req.seconds)
-    engine._time += req.seconds
-    engine.state.elapsed_time = engine._time
+    engine.advance_to(engine.current_time + req.seconds)
     return _build_state(session)
 
 
@@ -170,10 +168,74 @@ def purchase(session_id: str, req: PurchaseRequest):
     return _build_state(session)
 
 
+@router.post("/{session_id}/prestige", response_model=SessionState)
+def prestige_session(session_id: str):
+    session = _get_session_or_404(session_id)
+    engine = session.engine
+
+    prestige_node = None
+    for node in session.game.nodes:
+        if isinstance(node, PrestigeLayer):
+            prestige_node = node
+            break
+
+    if prestige_node is None:
+        raise HTTPException(status_code=400, detail=ErrorResponse(
+            error="no_prestige",
+            detail="This game has no prestige layer",
+            status=400,
+        ).model_dump())
+
+    # Evaluate prestige currency available
+    primary = engine._get_primary_resource_id()
+    balance = engine.get_balance(primary) if primary else 0.0
+    try:
+        prestige_currency = engine.evaluate_prestige(
+            prestige_node.id, balance=balance, time=engine.current_time,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=ErrorResponse(
+            error="prestige_failed",
+            detail=str(e),
+            status=400,
+        ).model_dump())
+
+    if prestige_currency <= 0:
+        raise HTTPException(status_code=400, detail=ErrorResponse(
+            error="prestige_not_ready",
+            detail="Not enough progress to prestige (would yield 0 currency)",
+            status=400,
+        ).model_dump())
+
+    # Reset engine state — create fresh engine and apply prestige currency
+    new_engine = PiecewiseEngine(session.game)
+    if primary:
+        new_engine.set_balance(primary, 50.0)
+    # TODO: Apply prestige currency as a permanent bonus once prestige system is fully implemented
+    session.engine = new_engine
+
+    return _build_state(session)
+
+
 @router.post("/{session_id}/auto-optimize", response_model=AutoOptimizeResponse)
 def auto_optimize(session_id: str, req: AutoOptimizeRequest):
     session = _get_session_or_404(session_id)
-    optimizer = GreedyOptimizer(session.game, session.engine.state)
+
+    if req.optimizer == "beam":
+        from idleframework.optimizer.beam import BeamSearchOptimizer
+        engine_copy = PiecewiseEngine(session.game, session.engine.state)
+        optimizer = BeamSearchOptimizer(engine_copy, beam_width=100)
+    elif req.optimizer == "mcts":
+        from idleframework.optimizer.mcts import MCTSOptimizer
+        engine_copy = PiecewiseEngine(session.game, session.engine.state)
+        optimizer = MCTSOptimizer(engine_copy, iterations=1000)
+    elif req.optimizer == "bnb":
+        from idleframework.optimizer.bnb import BranchAndBoundOptimizer
+        engine_copy = PiecewiseEngine(session.game, session.engine.state)
+        optimizer = BranchAndBoundOptimizer(engine_copy, depth_limit=20)
+    else:
+        optimizer = GreedyOptimizer(session.game, session.engine.state)
+
     result = optimizer.optimize(target_time=req.target_time, max_steps=req.max_steps)
 
     purchases = [
