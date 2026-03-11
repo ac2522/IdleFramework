@@ -336,7 +336,10 @@ class BigFloat:
                 return False
             return False
 
-        return self.exponent == other.exponent and round(self.mantissa, 10) == round(other.mantissa, 10)
+        return (
+            self.exponent == other.exponent
+            and round(self.mantissa, 10) == round(other.mantissa, 10)
+        )
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, (BigFloat, int, float)):

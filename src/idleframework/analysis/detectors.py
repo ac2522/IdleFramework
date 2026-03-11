@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from idleframework.model.game import GameDefinition
 from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_cost
+from idleframework.model.game import GameDefinition
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 
@@ -20,7 +20,11 @@ class AnalysisReport:
     optimizer_result: OptimizeResult | None = None
 
 
-def _run_greedy(game: GameDefinition, simulation_time: float, initial_balance: float = 50.0) -> OptimizeResult:
+def _run_greedy(
+    game: GameDefinition,
+    simulation_time: float,
+    initial_balance: float = 50.0,
+) -> OptimizeResult:
     engine = PiecewiseEngine(game)
     pay_resource = engine._get_primary_resource_id()
     if pay_resource is None:
@@ -66,7 +70,10 @@ def detect_dead_upgrades(
                 "upgrade_id": upg_id,
                 "cost": upg.cost,
                 "magnitude": upg.magnitude,
-                "reason": f"Negligible magnitude ({upg.magnitude:.4f}) for high cost ({upg.cost:.2e})",
+                "reason": (
+                    f"Negligible magnitude ({upg.magnitude:.4f})"
+                    f" for high cost ({upg.cost:.2e})"
+                ),
             })
 
     return dead
@@ -104,7 +111,10 @@ def detect_progression_walls(
                 "generator_id": node.id,
                 "cost_growth_rate": node.cost_growth_rate,
                 "severity": severity,
-                "reason": f"Generator '{node.id}' has high cost growth rate ({node.cost_growth_rate:.2f})",
+                "reason": (
+                    f"Generator '{node.id}' has high cost growth"
+                    f" rate ({node.cost_growth_rate:.2f})"
+                ),
             })
 
     if len(result.timeline) >= 3:
@@ -140,8 +150,7 @@ def _identify_wall_generator(game: GameDefinition) -> str | None:
     worst_gen = None
     worst_growth = 0.0
     for node in game.nodes:
-        if node.type == "generator":
-            if node.cost_growth_rate > worst_growth:
+        if node.type == "generator" and node.cost_growth_rate > worst_growth:
                 worst_growth = node.cost_growth_rate
                 worst_gen = node.id
     return worst_gen

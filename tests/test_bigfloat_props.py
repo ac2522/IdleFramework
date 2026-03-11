@@ -1,11 +1,10 @@
 """Property-based tests for BigFloat using Hypothesis."""
 
 import pytest
-from hypothesis import given, assume, settings
-from hypothesis.strategies import floats, integers, composite
+from hypothesis import assume, given, settings
+from hypothesis.strategies import composite, floats, integers
 
 from idleframework.bigfloat import BigFloat
-
 
 # ---------------------------------------------------------------------------
 # Strategies

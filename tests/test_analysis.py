@@ -1,17 +1,19 @@
 """Tests for the analysis engine detectors."""
 import json
 import sys
-import pytest
 from pathlib import Path
-from idleframework.model.game import GameDefinition
+
+import pytest
+
 from idleframework.analysis.detectors import (
-    detect_dead_upgrades,
-    detect_progression_walls,
-    detect_dominant_strategy,
-    run_sensitivity_analysis,
     AnalysisReport,
+    detect_dead_upgrades,
+    detect_dominant_strategy,
+    detect_progression_walls,
     run_full_analysis,
+    run_sensitivity_analysis,
 )
+from idleframework.model.game import GameDefinition
 
 sys.path.insert(0, str(Path(__file__).parent))
 from fixtures.largecap import make_largecap
@@ -89,7 +91,10 @@ class TestDominantStrategyDetection:
             ],
             edges=[
                 {"id": "e1", "source": "weak", "target": "cash", "edge_type": "production_target"},
-                {"id": "e2", "source": "strong", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e2", "source": "strong",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
             stacking_groups={},
         )

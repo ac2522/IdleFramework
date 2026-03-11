@@ -2,13 +2,12 @@
 
 import pytest
 
+from idleframework.model.game import GameDefinition
 from idleframework.model.stacking import (
     collect_stacking_bonuses,
     compute_final_multiplier,
 )
-from idleframework.model.game import GameDefinition
 from idleframework.model.state import GameState
-
 
 # ---------- compute_final_multiplier ----------
 

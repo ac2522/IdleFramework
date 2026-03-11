@@ -45,7 +45,7 @@ class PiecewiseEngine:
 
     def __init__(
         self,
-        game: "GameDefinition",
+        game: GameDefinition,
         state: GameState | None = None,
         validate: bool = False,
     ):

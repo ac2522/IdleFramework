@@ -15,16 +15,12 @@ from server.config import settings
 logger = logging.getLogger(__name__)
 
 
-GameSummary = TypedDict(
-    "GameSummary",
-    {
-        "id": str,
-        "name": str,
-        "node_count": int,
-        "edge_count": int,
-        "bundled": bool,
-    },
-)
+class GameSummary(TypedDict):
+    id: str
+    name: str
+    node_count: int
+    edge_count: int
+    bundled: bool
 
 
 def _slugify(name: str) -> str:

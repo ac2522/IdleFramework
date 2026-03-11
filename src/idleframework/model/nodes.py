@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------- Helper models ----------
 
@@ -35,7 +34,7 @@ class NodeBase(BaseModel):
     tags: list[str] = Field(default_factory=list)
     activation_mode: Literal["automatic", "interactive", "passive", "toggle"] = "automatic"
     pull_mode: Literal["pull_any", "pull_all"] = "pull_any"
-    cooldown_time: Optional[float] = None
+    cooldown_time: float | None = None
 
 
 # ---------- 17 Node types ----------
@@ -73,8 +72,8 @@ class Upgrade(NodeBase):
     cost: float
     target: str
     stacking_group: str
-    duration: Optional[float] = None
-    cooldown_time: Optional[float] = None
+    duration: float | None = None
+    cooldown_time: float | None = None
 
 
 class PrestigeLayer(NodeBase):
@@ -102,7 +101,7 @@ class Achievement(NodeBase):
     condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"]
     targets: list[ConditionTarget]
     logic: str = "and"
-    bonus: Optional[dict] = None
+    bonus: dict | None = None
     permanent: bool = True
 
 
@@ -134,7 +133,9 @@ class ProbabilityNode(NodeBase):
 class EndCondition(NodeBase):
     type: Literal["end_condition"] = "end_condition"
     name: str = ""
-    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = "single_threshold"
+    condition_type: Literal[
+        "single_threshold", "multi_threshold", "collection", "compound"
+    ] = "single_threshold"
     targets: list[ConditionTarget]
     logic: str = "and"
 
@@ -142,7 +143,9 @@ class EndCondition(NodeBase):
 class UnlockGate(NodeBase):
     type: Literal["unlock_gate"] = "unlock_gate"
     name: str = ""
-    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = "single_threshold"
+    condition_type: Literal[
+        "single_threshold", "multi_threshold", "collection", "compound"
+    ] = "single_threshold"
     targets: list[ConditionTarget]
     prerequisites: list[str]
     logic: str = "and"
@@ -155,7 +158,7 @@ class ChoiceGroup(NodeBase):
     options: list[str]
     max_selections: int = Field(default=1, ge=1)
     respeccable: bool = False
-    respec_cost: Optional[float] = None
+    respec_cost: float | None = None
 
 
 class Register(NodeBase):
@@ -169,37 +172,23 @@ class Gate(NodeBase):
     type: Literal["gate"] = "gate"
     name: str = ""
     mode: Literal["deterministic", "probabilistic"]
-    weights: Optional[list[float]] = None
-    probabilities: Optional[list[float]] = None
+    weights: list[float] | None = None
+    probabilities: list[float] | None = None
 
 
 class Queue(NodeBase):
     type: Literal["queue"] = "queue"
     name: str = ""
     delay: float = Field(gt=0)
-    capacity: Optional[int] = None
+    capacity: int | None = None
 
 
 # ---------- Discriminated Union ----------
 
 NodeUnion = Annotated[
-    Union[
-        Resource,
-        Generator,
-        NestedGenerator,
-        Upgrade,
-        PrestigeLayer,
-        SacrificeNode,
-        Achievement,
-        Manager,
-        Converter,
-        ProbabilityNode,
-        EndCondition,
-        UnlockGate,
-        ChoiceGroup,
-        Register,
-        Gate,
-        Queue,
-    ],
+    Resource | Generator | NestedGenerator | Upgrade | PrestigeLayer
+    | SacrificeNode | Achievement | Manager | Converter
+    | ProbabilityNode | EndCondition | UnlockGate | ChoiceGroup
+    | Register | Gate | Queue,
     Field(discriminator="type"),
 ]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -23,6 +23,6 @@ class Edge(BaseModel):
         "unlock_dependency",
         "upgrade_target",
     ]
-    rate: Optional[float] = None
-    formula: Optional[str] = None
-    condition: Optional[str] = None
+    rate: float | None = None
+    formula: str | None = None
+    condition: str | None = None

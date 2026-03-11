@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import copy
 
-from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.events import PurchaseEvent
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 

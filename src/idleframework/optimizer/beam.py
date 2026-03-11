@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import copy
 
-from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.events import PurchaseEvent
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 
@@ -36,7 +36,7 @@ class BeamSearchOptimizer:
             list(initial_timeline),
         )]
 
-        for step in range(max_steps):
+        for _step in range(max_steps):
             expansions = []
 
             for engine_state, purchases, timeline in beam:

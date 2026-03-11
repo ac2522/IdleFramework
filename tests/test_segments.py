@@ -5,8 +5,8 @@ TDD-first: these tests are written before the implementation.
 
 from __future__ import annotations
 
-
 import pytest
+from simulator import simulate_constant_production
 
 from idleframework.engine.events import (
     classify_formula_tier,
@@ -14,8 +14,6 @@ from idleframework.engine.events import (
 from idleframework.engine.segments import PiecewiseEngine
 from idleframework.model.game import GameDefinition
 from idleframework.model.state import GameState
-from simulator import simulate_constant_production
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,7 +81,10 @@ class TestSingleSegmentConstant:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)
@@ -120,7 +121,10 @@ class TestPurchaseCreatesNewSegment:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)
@@ -161,7 +165,10 @@ class TestFreePurchaseThreshold:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
             free_purchase_threshold=1e-5,
         )
@@ -200,7 +207,10 @@ class TestChatteringDetection:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
             event_epsilon=0.001,
         )
@@ -249,8 +259,14 @@ class TestStaleEventRecomputation:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
-                {"id": "e2", "source": "newspaper", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
+                {
+                    "id": "e2", "source": "newspaper",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)
@@ -333,7 +349,10 @@ class TestConvergenceVsRK4:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)
@@ -416,8 +435,14 @@ class TestMultipleGeneratorsCombinedRate:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
-                {"id": "e2", "source": "newspaper", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
+                {
+                    "id": "e2", "source": "newspaper",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)
@@ -455,8 +480,14 @@ class TestMultipleGeneratorsCombinedRate:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
-                {"id": "e2", "source": "newspaper", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
+                {
+                    "id": "e2", "source": "newspaper",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)
@@ -504,7 +535,10 @@ class TestUpgradePurchaseChangesMultiplier:
                 },
             ],
             edges=[
-                {"id": "e1", "source": "lemonade", "target": "cash", "edge_type": "production_target"},
+                {
+                    "id": "e1", "source": "lemonade",
+                    "target": "cash", "edge_type": "production_target",
+                },
             ],
         )
         state = GameState.from_game(game)

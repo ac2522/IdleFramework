@@ -1,15 +1,16 @@
 """Tests for MCTS and Branch-and-Bound optimizers."""
 import itertools
 import json
-import pytest
 from pathlib import Path
 
-from idleframework.model.game import GameDefinition
+import pytest
+
 from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_cost
+from idleframework.model.game import GameDefinition
+from idleframework.optimizer.bnb import BranchAndBoundOptimizer
 from idleframework.optimizer.greedy import OptimizeResult
 from idleframework.optimizer.mcts import MCTSOptimizer
-from idleframework.optimizer.bnb import BranchAndBoundOptimizer
 
 
 def _make_two_gen_game():
@@ -84,7 +85,9 @@ class TestMCTS:
             results_purchases.append(purchase_ids)
 
         unique_sequences = set(results_purchases)
-        assert len(unique_sequences) > 1, "All 10 seeds produced identical sequences — no randomness"
+        assert len(unique_sequences) > 1, (
+            "All 10 seeds produced identical sequences — no randomness"
+        )
 
     def test_mcts_seeded_determinism(self):
         game = _make_two_gen_game()
@@ -100,7 +103,7 @@ class TestMCTS:
         r2 = run_with_seed(42)
 
         assert len(r1.purchases) == len(r2.purchases)
-        for p1, p2 in zip(r1.purchases, r2.purchases):
+        for p1, p2 in zip(r1.purchases, r2.purchases, strict=True):
             assert p1.node_id == p2.node_id
             assert p1.cost == pytest.approx(p2.cost)
         assert r1.final_production == pytest.approx(r2.final_production)

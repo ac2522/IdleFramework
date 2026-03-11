@@ -137,7 +137,7 @@ class TestNodeConstruction:
         assert p.crit_multiplier == 1.0
 
     def test_end_condition(self):
-        from idleframework.model.nodes import EndCondition, ConditionTarget
+        from idleframework.model.nodes import ConditionTarget, EndCondition
 
         e = EndCondition(
             id="end1",
@@ -148,7 +148,7 @@ class TestNodeConstruction:
         assert e.logic == "and"
 
     def test_unlock_gate(self):
-        from idleframework.model.nodes import UnlockGate, ConditionTarget
+        from idleframework.model.nodes import ConditionTarget, UnlockGate
 
         u = UnlockGate(
             id="gate1",

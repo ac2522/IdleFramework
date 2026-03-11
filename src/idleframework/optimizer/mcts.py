@@ -9,8 +9,8 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.events import PurchaseEvent
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 

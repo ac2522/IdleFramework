@@ -1,7 +1,8 @@
 """Tests for engine upgrade purchasing and stacking group integration."""
 import pytest
-from idleframework.model.game import GameDefinition
+
 from idleframework.engine.segments import PiecewiseEngine
+from idleframework.model.game import GameDefinition
 
 
 def _make_upgrade_game():
