@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -14,18 +14,40 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+
 import { editorEdgeTypes } from '../editor/edges'
 import { editorNodeTypes } from '../editor/nodes'
 import NodePalette from '../editor/NodePalette'
+import PropertyPanel from '../editor/PropertyPanel'
+import LiveAnalysisPanel from '../editor/LiveAnalysisPanel'
+import EditorToolbar from '../editor/EditorToolbar'
+import ValidationBar from '../editor/ValidationBar'
+import JsonPreview from '../editor/JsonPreview'
 import { defaultNodeData, nextNodeId } from '../editor/types'
+import type { EditorNode, EditorNodeData } from '../editor/types'
 
 function EditorCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [gameName, setGameName] = useState('Untitled Game')
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const { screenToFlowPosition } = useReactFlow()
 
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+
   const onConnect: OnConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
+    (params) =>
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            type: 'resource',
+            label: 'resource flow',
+            data: { edgeType: 'resource_flow' },
+          },
+          eds,
+        ),
+      ),
     [setEdges],
   )
 
@@ -52,37 +74,86 @@ function EditorCanvas() {
     [screenToFlowPosition, setNodes],
   )
 
+  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id)
+  }, [])
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null)
+  }, [])
+
+  const onUpdateNode = useCallback(
+    (nodeId: string, data: Partial<EditorNodeData>) => {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n,
+        ),
+      )
+    },
+    [setNodes],
+  )
+
+  const onLoadGraph = useCallback(
+    (newNodes: EditorNode[], newEdges: Edge[]) => {
+      setNodes(newNodes)
+      setEdges(newEdges)
+    },
+    [setNodes, setEdges],
+  )
+
   return (
-    <div className="flex h-[calc(100vh-57px)]">
-      <NodePalette />
-
-      {/* Canvas */}
-      <div className="flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          nodeTypes={editorNodeTypes}
-          edgeTypes={editorEdgeTypes}
-          fitView
-        >
-          <Controls />
-          <MiniMap />
-          <Background />
-        </ReactFlow>
+    <div className="flex flex-col h-[calc(100vh-57px)]">
+      <EditorToolbar
+        nodes={nodes}
+        edges={edges}
+        gameName={gameName}
+        onSetGameName={setGameName}
+        onLoadGraph={onLoadGraph}
+      />
+      <div className="flex flex-1 min-h-0">
+        <NodePalette />
+        <div className="flex-1">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={editorNodeTypes}
+            edgeTypes={editorEdgeTypes}
+            fitView
+          >
+            <Controls />
+            <MiniMap />
+            <Background />
+          </ReactFlow>
+        </div>
+        <aside className="w-72 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <PropertyPanel
+              selectedNode={selectedNode as Node<EditorNodeData> | null}
+              onUpdateNode={onUpdateNode}
+            />
+          </div>
+          <div className="border-t border-gray-200 dark:border-gray-700 flex-1 overflow-y-auto">
+            <LiveAnalysisPanel
+              nodes={nodes as unknown as EditorNode[]}
+              edges={edges}
+              gameName={gameName}
+            />
+          </div>
+        </aside>
       </div>
-
-      {/* Properties placeholder */}
-      <aside className="w-72 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 overflow-y-auto">
-        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-          Properties
-        </h3>
-        <p className="text-xs text-gray-400">Select a node to edit...</p>
-      </aside>
+      <ValidationBar nodes={nodes} edges={edges} />
+      <JsonPreview
+        nodes={nodes as unknown as EditorNode[]}
+        edges={edges}
+        gameName={gameName}
+      />
     </div>
   )
 }

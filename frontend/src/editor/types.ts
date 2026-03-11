@@ -9,6 +9,7 @@ interface NodeDataBase {
   activation_mode: string
   pull_mode: string
   cooldown_time: number | null
+  [key: string]: unknown
 }
 
 export interface ResourceNodeData extends NodeDataBase {
