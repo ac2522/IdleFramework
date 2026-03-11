@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import PlayPage from './pages/PlayPage'
 import AnalyzePage from './pages/AnalyzePage'
+import EditorPage from './pages/EditorPage'
 
 export default function App() {
   return (
@@ -9,6 +10,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/play" element={<PlayPage />} />
         <Route path="/analyze" element={<AnalyzePage />} />
+        <Route path="/editor" element={<EditorPage />} />
         <Route path="/" element={<Navigate to="/play" replace />} />
       </Route>
     </Routes>

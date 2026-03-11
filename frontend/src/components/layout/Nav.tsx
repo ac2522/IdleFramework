@@ -14,6 +14,7 @@ export default function Nav() {
         <span className="font-bold text-lg mr-4">IdleFramework</span>
         <NavLink to="/play" className={linkClass}>Play</NavLink>
         <NavLink to="/analyze" className={linkClass}>Analyze</NavLink>
+        <NavLink to="/editor" className={linkClass}>Editor</NavLink>
         <a
           href="https://github.com/ac2522/IdleFramework"
           target="_blank"
