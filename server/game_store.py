@@ -2,11 +2,29 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
+from typing import TypedDict
+
+from pydantic import ValidationError
 
 from idleframework.model.game import GameDefinition
 from server.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+GameSummary = TypedDict(
+    "GameSummary",
+    {
+        "id": str,
+        "name": str,
+        "node_count": int,
+        "edge_count": int,
+        "bundled": bool,
+    },
+)
 
 
 def _slugify(name: str) -> str:
@@ -33,7 +51,7 @@ class GameStore:
         self._bundled_dir.mkdir(parents=True, exist_ok=True)
         self._user_dir.mkdir(parents=True, exist_ok=True)
 
-    def list_games(self) -> list[dict]:
+    def list_games(self) -> list[GameSummary]:
         """List all games with metadata."""
         games = []
         for path in sorted(self._bundled_dir.glob("*.json")):
@@ -74,6 +92,11 @@ class GameStore:
     def save_game(self, game: GameDefinition) -> str:
         """Save a user game. Returns the game ID."""
         game_id = _slugify(game.name)
+        if (self._bundled_dir / f"{game_id}.json").exists():
+            raise ValueError(
+                f"Cannot save: '{game_id}' conflicts with"
+                " bundled game"
+            )
         path = self._user_dir / f"{game_id}.json"
         path.write_text(game.model_dump_json(indent=2))
         return game_id
@@ -87,11 +110,16 @@ class GameStore:
             return True
         return False
 
-    def _load_file(self, path: Path) -> GameDefinition | None:
+    def _load_file(
+        self, path: Path
+    ) -> GameDefinition | None:
         try:
             data = json.loads(path.read_text())
             return GameDefinition.model_validate(data)
-        except Exception:
+        except (json.JSONDecodeError, ValidationError) as e:
+            logger.warning(
+                "Failed to load game %s: %s", path, e
+            )
             return None
 
 

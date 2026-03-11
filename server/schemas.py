@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # -- Games --
 
 class GameSummary(BaseModel):
@@ -31,10 +30,10 @@ class AnalysisRequest(BaseModel):
     game_id: str
     simulation_time: float = Field(default=300.0, gt=0, le=86400)
     optimizer: Literal["greedy", "beam", "mcts", "bnb"] = "greedy"
-    beam_width: int = 100
-    mcts_iterations: int = 1000
+    beam_width: int = Field(default=100, ge=1)
+    mcts_iterations: int = Field(default=1000, ge=1)
     mcts_seed: int | None = None
-    bnb_depth: int = 20
+    bnb_depth: int = Field(default=20, ge=1)
     tags: list[str] | None = None
 
 
@@ -70,15 +69,18 @@ class AutoOptimizeRequest(BaseModel):
     target_time: float = Field(default=300.0, gt=0, le=86400)
     optimizer: Literal["greedy", "beam", "mcts", "bnb"] = "greedy"
     max_steps: int = Field(default=500, ge=1, le=10000)
+    beam_width: int = Field(default=100, ge=1)
+    mcts_iterations: int = Field(default=1000, ge=1)
+    bnb_depth: int = Field(default=20, ge=1)
 
 
 class ResourceState(BaseModel):
-    current_value: float
+    current_value: float = Field(ge=0)
     production_rate: float
 
 
 class GeneratorState(BaseModel):
-    owned: int
+    owned: int = Field(ge=0)
     cost_next: float
     production_per_sec: float
 
@@ -103,7 +105,7 @@ class AchievementState(BaseModel):
 class SessionState(BaseModel):
     session_id: str
     game_id: str
-    elapsed_time: float
+    elapsed_time: float = Field(ge=0)
     resources: dict[str, ResourceState]
     generators: dict[str, GeneratorState]
     upgrades: dict[str, UpgradeState]

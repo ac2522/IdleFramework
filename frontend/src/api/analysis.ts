@@ -1,10 +1,10 @@
-import { apiFetch } from './client'
-import type { AnalysisResult, CompareResult } from './types'
+import { apiFetch, ApiClientError } from './client'
+import type { AnalysisResult, CompareResult, ApiError, OptimizerType } from './types'
 
 export async function runAnalysis(params: {
   game_id: string
   simulation_time?: number
-  optimizer?: string
+  optimizer?: OptimizerType
 }): Promise<AnalysisResult> {
   return apiFetch('/analysis/run', { method: 'POST', body: JSON.stringify(params) })
 }
@@ -27,7 +27,14 @@ export async function generateReport(params: {
     body: JSON.stringify(params),
   })
   if (!res.ok) {
-    throw new Error(`Report generation failed: ${res.status} ${res.statusText}`)
+    let apiError: ApiError
+    try {
+      const body = await res.json()
+      apiError = body.detail ?? body
+    } catch {
+      apiError = { error: 'unknown', detail: res.statusText, status: res.status }
+    }
+    throw new ApiClientError(apiError)
   }
   return res.text()
 }

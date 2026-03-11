@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { OptimizerType } from '../../api/types'
 import GameSelector from '../layout/GameSelector'
 
 const OPTIMIZERS = [
@@ -10,7 +11,7 @@ const OPTIMIZERS = [
 
 interface AnalysisControlsProps {
   loading: boolean
-  onRunAnalysis: (gameId: string, time: number, optimizer: string) => void
+  onRunAnalysis: (gameId: string, time: number, optimizer: OptimizerType) => void
   onRunCompare: (gameId: string, time: number) => void
 }
 
@@ -20,7 +21,7 @@ export default function AnalysisControls({
   onRunCompare,
 }: AnalysisControlsProps) {
   const [gameId, setGameId] = useState('minicap')
-  const [optimizer, setOptimizer] = useState('greedy')
+  const [optimizer, setOptimizer] = useState<OptimizerType>('greedy')
   const [simulationTime, setSimulationTime] = useState(300)
 
   return (
@@ -41,7 +42,7 @@ export default function AnalysisControls({
           <select
             id="optimizer-select"
             value={optimizer}
-            onChange={(e) => setOptimizer(e.target.value)}
+            onChange={(e) => setOptimizer(e.target.value as OptimizerType)}
             disabled={loading}
             className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           >

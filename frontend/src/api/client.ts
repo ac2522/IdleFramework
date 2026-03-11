@@ -11,8 +11,8 @@ export class ApiClientError extends Error {
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api/v1${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
   })
   if (!res.ok) {
     let apiError: ApiError
@@ -24,5 +24,6 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     }
     throw new ApiClientError(apiError)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }

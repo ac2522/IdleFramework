@@ -90,3 +90,5 @@ export interface ApiError {
   detail: string
   status: number
 }
+
+export type OptimizerType = 'greedy' | 'beam' | 'mcts' | 'bnb'

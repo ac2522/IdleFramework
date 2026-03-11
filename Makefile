@@ -1,4 +1,4 @@
-.PHONY: dev server frontend build run install test
+.PHONY: dev server frontend build run install test lint format
 
 install:
 	pip install -e ".[dev,server]"
@@ -23,3 +23,10 @@ run: build
 
 test:
 	pytest tests/ -v
+
+lint:
+	ruff check src/ server/ tests/
+	cd frontend && npx eslint .
+
+format:
+	ruff format src/ server/ tests/

@@ -4,10 +4,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import PlainTextResponse
 
+from idleframework.export import to_xml, to_yaml
 from idleframework.model.game import GameDefinition
-from idleframework.export import to_yaml, to_xml
 from server.game_store import game_store
-from server.schemas import GameListResponse, GameCreateResponse, GameSummary, ErrorResponse
+from server.schemas import ErrorResponse, GameCreateResponse, GameListResponse, GameSummary
 
 router = APIRouter()
 
@@ -32,7 +32,20 @@ def get_game(game_id: str):
 
 @router.post("/", response_model=GameCreateResponse, status_code=201)
 def create_game(game: GameDefinition):
-    game_id = game_store.save_game(game)
+    try:
+        game_id = game_store.save_game(game)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=ErrorResponse(
+                error="name_conflict",
+                detail=(
+                    f"Name '{game.name}' conflicts with"
+                    " a bundled game"
+                ),
+                status=409,
+            ).model_dump(),
+        ) from exc
     return GameCreateResponse(id=game_id, name=game.name)
 
 

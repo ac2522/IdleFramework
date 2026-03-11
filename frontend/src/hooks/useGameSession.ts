@@ -38,7 +38,7 @@ export function useGameSession(): UseGameSessionReturn {
 
   const advanceTime = useCallback(async (seconds: number) => {
     const sid = sessionRef.current
-    if (!sid) return
+    if (!sid) { setError('No active session'); return }
     try {
       const s = await engine.advance(sid, seconds)
       setState(s)
@@ -49,7 +49,7 @@ export function useGameSession(): UseGameSessionReturn {
 
   const purchaseNode = useCallback(async (nodeId: string, count = 1) => {
     const sid = sessionRef.current
-    if (!sid) return
+    if (!sid) { setError('No active session'); return }
     try {
       const s = await engine.purchase(sid, nodeId, count)
       setState(s)
@@ -60,7 +60,7 @@ export function useGameSession(): UseGameSessionReturn {
 
   const doPrestige = useCallback(async () => {
     const sid = sessionRef.current
-    if (!sid) return
+    if (!sid) { setError('No active session'); return }
     try {
       const s = await engine.prestige(sid)
       setState(s)

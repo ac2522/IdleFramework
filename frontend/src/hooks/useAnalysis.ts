@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { runAnalysis as apiRunAnalysis, compareStrategies } from '../api/analysis'
-import type { AnalysisResult, CompareResult } from '../api/types'
+import type { AnalysisResult, CompareResult, OptimizerType } from '../api/types'
 
 interface AnalysisState {
   loading: boolean
@@ -18,7 +18,7 @@ export function useAnalysis() {
   })
 
   const runAnalysis = useCallback(
-    async (gameId: string, simulationTime: number, optimizer: string) => {
+    async (gameId: string, simulationTime: number, optimizer: OptimizerType) => {
       setState((prev) => ({ ...prev, loading: true, error: null, compareResult: null }))
       try {
         const result = await apiRunAnalysis({

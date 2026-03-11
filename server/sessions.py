@@ -1,6 +1,7 @@
 """In-memory engine session manager."""
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_cost
 from idleframework.model.game import GameDefinition
 from server.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -33,7 +36,12 @@ class SessionManager:
         self._max = max_sessions
         self._ttl = ttl_seconds
 
-    def create(self, game_id: str, game: GameDefinition, initial_balance: float = 50.0) -> EngineSession:
+    def create(
+        self,
+        game_id: str,
+        game: GameDefinition,
+        initial_balance: float = 50.0,
+    ) -> EngineSession:
         self._evict_expired()
         if len(self._sessions) >= self._max:
             self._evict_lru()
@@ -46,15 +54,22 @@ class SessionManager:
         if primary:
             engine.set_balance(primary, initial_balance)
             # Buy first generator if affordable
-            for gen_id in engine._generators:
-                cost = bulk_cost(
-                    engine._generators[gen_id].cost_base,
-                    engine._generators[gen_id].cost_growth_rate,
-                    0, 1,
+            try:
+                for gen_id in engine._generators:
+                    cost = bulk_cost(
+                        engine._generators[gen_id].cost_base,
+                        engine._generators[gen_id].cost_growth_rate,
+                        0, 1,
+                    )
+                    if cost <= initial_balance:
+                        engine.purchase(gen_id, 1)
+                        break
+            except Exception:
+                logger.warning(
+                    "Auto-purchase failed during"
+                    " session creation",
+                    exc_info=True,
                 )
-                if cost <= initial_balance:
-                    engine.purchase(gen_id, 1)
-                    break
 
         now = time.monotonic()
         session = EngineSession(

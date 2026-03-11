@@ -10,8 +10,6 @@ interface GeneratorCardProps {
 
 export default function GeneratorCard({ name, gen, balance, onBuy }: GeneratorCardProps) {
   const canAfford1 = balance >= gen.cost_next
-  // Rough check: can afford 10 if can afford at least the first
-  const canAfford10 = canAfford1
 
   return (
     <div className="rounded-lg bg-white dark:bg-gray-800 p-4 shadow-sm border border-gray-200 dark:border-gray-700">
@@ -47,9 +45,10 @@ export default function GeneratorCard({ name, gen, balance, onBuy }: GeneratorCa
           </button>
           <button
             onClick={() => onBuy(10)}
-            disabled={!canAfford10}
+            disabled={!canAfford1}
+            title="Purchases up to 10 units"
             className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-              canAfford10
+              canAfford1
                 ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
             }`}

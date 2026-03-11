@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 # Import and include route modules
-from server.routes import games, analysis, engine  # noqa: E402
+from server.routes import analysis, engine, games  # noqa: E402
 
 app.include_router(games.router, prefix="/api/v1/games", tags=["games"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["analysis"])
