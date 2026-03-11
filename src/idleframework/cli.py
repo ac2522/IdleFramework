@@ -1,6 +1,7 @@
 """IdleFramework CLI — validate, analyze, report, compare, export."""
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
 
@@ -21,13 +22,16 @@ def _load_game(game_file: str) -> GameDefinition:
         data = json.loads(path.read_text())
     except json.JSONDecodeError as e:
         typer.echo(f"Error: Invalid JSON: {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
+    except (OSError, UnicodeDecodeError) as e:
+        typer.echo(f"Error: Could not read file '{game_file}': {e}")
+        raise typer.Exit(code=1) from e
 
     try:
         game = GameDefinition(**data)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         typer.echo(f"Error: Validation failed: {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     return game
 
@@ -101,7 +105,11 @@ def _generate_html_report(report, cdn: bool = True) -> str:
     if opt and opt.purchases:
         rows = []
         for p in opt.purchases:
-            rows.append(f"<tr><td>{p.time:.1f}s</td><td>{p.node_id}</td><td>{p.cost:.2e}</td></tr>")
+            rows.append(
+                f"<tr><td>{p.time:.1f}s</td>"
+                f"<td>{html.escape(str(p.node_id))}</td>"
+                f"<td>{p.cost:.2e}</td></tr>"
+            )
         purchases_html = f"""
         <h2>Purchase Timeline</h2>
         <table border="1" cellpadding="4" cellspacing="0">
@@ -112,12 +120,19 @@ def _generate_html_report(report, cdn: bool = True) -> str:
 
     dead_html = ""
     if report.dead_upgrades:
-        items = "".join(f"<li>{d['upgrade_id']}: {d['reason']}</li>" for d in report.dead_upgrades)
+        items = "".join(
+            f"<li>{html.escape(str(d['upgrade_id']))}: "
+            f"{html.escape(str(d['reason']))}</li>"
+            for d in report.dead_upgrades
+        )
         dead_html = f"<h2>Dead Upgrades</h2><ul>{items}</ul>"
 
     walls_html = ""
     if report.progression_walls:
-        items = "".join(f"<li>{w['reason']}</li>" for w in report.progression_walls)
+        items = "".join(
+            f"<li>{html.escape(str(w['reason']))}</li>"
+            for w in report.progression_walls
+        )
         walls_html = f"<h2>Progression Walls</h2><ul>{items}</ul>"
 
     dominant_html = ""
@@ -125,7 +140,7 @@ def _generate_html_report(report, cdn: bool = True) -> str:
         ds = report.dominant_strategy
         dominant_html = (
             f"<h2>Dominant Strategy</h2>"
-            f"<p>{ds['dominant_gen']} dominates by {ds['ratio']:.1f}x</p>"
+            f"<p>{html.escape(str(ds['dominant_gen']))} dominates by {ds['ratio']:.1f}x</p>"
         )
 
     final_stats = ""
@@ -143,7 +158,7 @@ def _generate_html_report(report, cdn: bool = True) -> str:
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>IdleFramework Report: {report.game_name}</title>
+    <title>IdleFramework Report: {html.escape(str(report.game_name))}</title>
     <style>
         body {{ font-family: sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; }}
         h1 {{ color: #333; }}
@@ -152,7 +167,7 @@ def _generate_html_report(report, cdn: bool = True) -> str:
     </style>
 </head>
 <body>
-    <h1>Analysis Report: {report.game_name}</h1>
+    <h1>Analysis Report: {html.escape(str(report.game_name))}</h1>
     <p>Simulation time: {report.simulation_time}s</p>
     {dead_html}
     {walls_html}
@@ -185,7 +200,11 @@ def compare(
     for tag in tags:
         variant = _exclude_tag(game, tag)
         variant_report = run_full_analysis(variant, simulation_time=time)
-        variant_prod = variant_report.optimizer_result.final_production if variant_report.optimizer_result else 0
+        variant_prod = (
+            variant_report.optimizer_result.final_production
+            if variant_report.optimizer_result
+            else 0
+        )
 
         ratio = baseline_prod / variant_prod if variant_prod > 0 else float("inf")
         typer.echo(f"\nWithout '{tag}' upgrades: {variant_prod:.2e}/s (baseline is {ratio:.1f}x)")
@@ -206,7 +225,10 @@ def _exclude_tag(game: GameDefinition, tag: str) -> GameDefinition:
             filtered_nodes.append(node)
 
     game_copy.nodes = filtered_nodes
-    game_copy.edges = [e for e in game_copy.edges if e.source not in excluded_ids and e.target not in excluded_ids]
+    game_copy.edges = [
+        e for e in game_copy.edges
+        if e.source not in excluded_ids and e.target not in excluded_ids
+    ]
 
     return game_copy
 
@@ -218,7 +240,7 @@ def export_cmd(
 ) -> None:
     game = _load_game(game_file)
 
-    from idleframework.export import to_yaml, to_xml
+    from idleframework.export import to_xml, to_yaml
 
     fmt = format.lower()
     if fmt == "yaml":

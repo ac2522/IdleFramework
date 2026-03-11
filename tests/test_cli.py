@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from idleframework.cli import app
-from idleframework.export import to_yaml, to_xml
+from idleframework.export import to_xml, to_yaml
 from idleframework.model.game import GameDefinition
 
 runner = CliRunner()

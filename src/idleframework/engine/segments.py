@@ -45,7 +45,7 @@ class PiecewiseEngine:
 
     def __init__(
         self,
-        game: "GameDefinition",
+        game: GameDefinition,
         state: GameState | None = None,
         validate: bool = False,
     ):
@@ -358,8 +358,16 @@ class PiecewiseEngine:
             gen_multipliers = self._compute_generator_multipliers()
         rates = self.compute_production_rates()
 
+        upgrade_type = getattr(upgrade, "upgrade_type", "multiplicative")
+
         if upgrade.target == "_all":
             current_total = sum(rates.values())
+            if upgrade_type == "multiplicative":
+                return current_total * (upgrade.magnitude - 1)
+            elif upgrade_type == "additive":
+                return upgrade.magnitude
+            elif upgrade_type == "percentage":
+                return current_total * (upgrade.magnitude / 100)
             return current_total * (upgrade.magnitude - 1)
         else:
             node = self._game.get_node(upgrade.target)
@@ -369,6 +377,12 @@ class PiecewiseEngine:
                     return 0.0
                 gen_mult = gen_multipliers.get(node.id, 1.0)
                 gen_rate = node.base_production * ns.owned / node.cycle_time * gen_mult
+                if upgrade_type == "multiplicative":
+                    return gen_rate * (upgrade.magnitude - 1)
+                elif upgrade_type == "additive":
+                    return upgrade.magnitude * (ns.owned / node.cycle_time)
+                elif upgrade_type == "percentage":
+                    return gen_rate * (upgrade.magnitude / 100)
                 return gen_rate * (upgrade.magnitude - 1)
         return 0.0
 
@@ -472,18 +486,19 @@ class PiecewiseEngine:
         """
         threshold = self._game.free_purchase_threshold
         purchased: list[str] = []
-        currency_id = self._get_primary_resource_id()
-        if currency_id is None:
-            return purchased
 
         changed = True
         while changed:
             changed = False
-            balance = self._state.get(currency_id).current_value
-            if balance <= 0:
-                break
 
             for node in self._game.nodes:
+                currency_id = self._get_currency_resource_id_for(node.id)
+                if currency_id is None:
+                    continue
+                balance = self._state.get(currency_id).current_value
+                if balance <= 0 and not (isinstance(node, Upgrade) and node.cost == 0):
+                    continue
+
                 if isinstance(node, Generator):
                     ns = self._state.get(node.id)
                     cost_bf = bulk_purchase_cost(
@@ -498,7 +513,6 @@ class PiecewiseEngine:
                         ns.owned += 1
                         purchased.append(node.id)
                         changed = True
-                        balance = self._state.get(currency_id).current_value
 
                 elif isinstance(node, Upgrade):
                     ns = self._state.get(node.id)
@@ -510,7 +524,6 @@ class PiecewiseEngine:
                         ns.purchased = True
                         purchased.append(node.id)
                         changed = True
-                        balance = self._state.get(currency_id).current_value
                     elif cost == 0:
                         # Free upgrades
                         ns.purchased = True
@@ -580,6 +593,7 @@ class PiecewiseEngine:
                     try:
                         self.purchase(node_id)
                     except ValueError:
+                        # Expected when free purchases above consumed the balance
                         break
                     purchases_in_window += 1
 
@@ -646,7 +660,7 @@ class PiecewiseEngine:
 
     def _ensure_can_afford(self, node_id: str) -> None:
         """Nudge balance up if floating-point drift left us barely short."""
-        currency_id = self._get_primary_resource_id()
+        currency_id = self._get_currency_resource_id_for(node_id)
         if currency_id is None:
             return
         if node_id in self._generators:
@@ -669,21 +683,19 @@ class PiecewiseEngine:
 
         Used when chattering is detected to break out of the purchase loop.
         """
-        currency_id = self._get_primary_resource_id()
-        if currency_id is None:
-            return
-
         changed = True
         while changed:
             changed = False
-            balance = self._state.get(currency_id).current_value
-            if balance <= 0:
-                break
 
             # Find all affordable, sorted by efficiency
             affordable: list[tuple[str, float, float]] = []
 
             for node in self._game.nodes:
+                currency_id = self._get_currency_resource_id_for(node.id)
+                if currency_id is None:
+                    continue
+                balance = self._state.get(currency_id).current_value
+
                 if isinstance(node, Generator):
                     ns = self._state.get(node.id)
                     cost_bf = bulk_purchase_cost(

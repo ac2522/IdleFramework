@@ -6,7 +6,6 @@ import pytest
 
 from idleframework.dsl.compiler import CompiledFormula, compile_formula, evaluate_formula
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -189,20 +188,20 @@ class TestSecurity:
             compile_formula(expr)
 
     def test_no_attribute_access(self):
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=".+"):
             _eval("x.__class__", {"x": 1})
 
     def test_no_import(self):
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=".+"):
             _eval("__import__('os')")
 
     def test_no_subscript(self):
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=".+"):
             _eval("x[0]", {"x": [1, 2, 3]})
 
     def test_ast_whitelist_enforced(self):
         # Attribute access should be caught by the whitelist
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=".+"):
             compile_formula("x.__class__.__bases__")
 
     def test_dunder_names_forbidden(self):

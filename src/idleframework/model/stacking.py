@@ -48,8 +48,8 @@ def compute_final_multiplier(
 
 
 def collect_stacking_bonuses(
-    game: "GameDefinition",
-    state: "GameState",
+    game: GameDefinition,
+    state: GameState,
 ) -> dict[str, dict[str, object]]:
     """Build stacking-group data from a game definition and runtime state.
 

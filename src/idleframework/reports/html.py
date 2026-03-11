@@ -30,18 +30,11 @@ def generate_report(
         if gen_chart:
             figures.append(gen_chart)
 
-    plotlyjs_mode: str | bool
-    if use_cdn:
-        plotlyjs_mode = "cdn"
-    else:
-        plotlyjs_mode = True
+    plotlyjs_mode: str | bool = "cdn" if use_cdn else True
 
     chart_html_parts: list[str] = []
     for i, fig in enumerate(figures):
-        if i == 0:
-            include = plotlyjs_mode
-        else:
-            include = False
+        include = plotlyjs_mode if i == 0 else False
         html_fragment = pio.to_html(fig, full_html=False, include_plotlyjs=include)
         chart_html_parts.append(html_fragment)
 
@@ -137,13 +130,19 @@ def _build_summary(report: AnalysisReport) -> str:
         parts.append(f"<p><strong>Dead upgrades found:</strong> {len(report.dead_upgrades)}</p>")
         parts.append("<ul>")
         for du in report.dead_upgrades:
-            parts.append(f"<li>{escape(du['upgrade_id'])}: {escape(du.get('reason', 'N/A'))}</li>")
+            parts.append(
+                f"<li>{escape(du['upgrade_id'])}: "
+                f"{escape(du.get('reason', 'N/A'))}</li>"
+            )
         parts.append("</ul>")
     else:
         parts.append("<p><strong>Dead upgrades:</strong> None detected</p>")
 
     if report.progression_walls:
-        parts.append(f"<p><strong>Progression walls found:</strong> {len(report.progression_walls)}</p>")
+        wall_count = len(report.progression_walls)
+        parts.append(
+            f"<p><strong>Progression walls found:</strong> {wall_count}</p>"
+        )
         parts.append("<ul>")
         for pw in report.progression_walls:
             parts.append(f"<li>{escape(pw.get('reason', 'N/A'))}</li>")
@@ -179,7 +178,10 @@ def _wrap_html(title: str, game_name: str, summary_html: str, charts_html: str) 
         }}
         h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
         h2 {{ color: #34495e; margin-top: 30px; }}
-        .summary {{ background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px; }}
+        .summary {{
+            background: #fff; padding: 20px; border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px;
+        }}
         .chart {{ margin-bottom: 30px; }}
         footer {{ text-align: center; color: #999; margin-top: 40px; font-size: 0.9em; }}
     </style>

@@ -74,27 +74,30 @@ def check_edge_compatibility(game: GameDefinition) -> list[str]:
         source_node = node_map[edge.source]
 
         # production_target source must be generator or nested_generator
-        if edge.edge_type == "production_target":
-            if not isinstance(source_node, (Generator, NestedGenerator)):
-                errors.append(
+        if (
+            edge.edge_type == "production_target"
+            and not isinstance(source_node, (Generator, NestedGenerator))
+        ):
+            errors.append(
                     f"Edge {edge.id!r}: production_target source {edge.source!r} "
                     f"is not a generator or nested_generator (type={source_node.type!r})"
                 )
 
         # upgrade_target source must be an upgrade
-        if edge.edge_type == "upgrade_target":
-            if not isinstance(source_node, Upgrade):
-                errors.append(
+        if (
+            edge.edge_type == "upgrade_target"
+            and not isinstance(source_node, Upgrade)
+        ):
+            errors.append(
                     f"Edge {edge.id!r}: upgrade_target source {edge.source!r} "
                     f"is not an upgrade (type={source_node.type!r})"
                 )
 
         # state_modifier must have a formula
-        if edge.edge_type == "state_modifier":
-            if not edge.formula:
-                errors.append(
-                    f"Edge {edge.id!r}: state_modifier edge must have a formula"
-                )
+        if edge.edge_type == "state_modifier" and not edge.formula:
+            errors.append(
+                f"Edge {edge.id!r}: state_modifier edge must have a formula"
+            )
 
     return errors
 
@@ -126,9 +129,12 @@ def check_tag_subgraph(
     broken: list[dict[str, str]] = []
 
     for edge in game.edges:
-        if edge.edge_type == "unlock_dependency":
-            if edge.source in removed_set and edge.target in kept:
-                broken.append({"source": edge.source, "target": edge.target})
+        if (
+            edge.edge_type == "unlock_dependency"
+            and edge.source in removed_set
+            and edge.target in kept
+        ):
+            broken.append({"source": edge.source, "target": edge.target})
 
     return TagFilterResult(removed_nodes=removed, broken_dependencies=broken)
 

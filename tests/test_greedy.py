@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from idleframework.model.game import GameDefinition
 from idleframework.model.state import GameState
 from idleframework.optimizer.greedy import GreedyOptimizer, PurchaseStep
-
 
 # ---------------------------------------------------------------------------
 # Helper: build a minimal 2-generator game for unit tests

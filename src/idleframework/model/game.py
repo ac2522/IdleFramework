@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -21,7 +21,7 @@ class GameDefinition(BaseModel):
 
     schema_version: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     nodes: list[NodeUnion]
     edges: list[Edge]
     stacking_groups: dict[str, Literal["additive", "multiplicative", "percentage"]]
@@ -31,11 +31,12 @@ class GameDefinition(BaseModel):
     free_purchase_threshold: float = 1e-5
 
     @model_validator(mode="after")
-    def _validate_game(self) -> "GameDefinition":
+    def _validate_game(self) -> GameDefinition:
         self._validate_unique_node_ids()
         self._validate_unique_edge_ids()
         self._validate_edge_references()
         self._validate_upgrade_targets()
+        self._validate_stacking_groups()
         self._validate_formulas()
         return self
 
@@ -74,12 +75,24 @@ class GameDefinition(BaseModel):
     def _validate_upgrade_targets(self) -> None:
         node_ids = {n.id for n in self.nodes}
         for node in self.nodes:
-            if isinstance(node, Upgrade):
-                if node.target != "_all" and node.target not in node_ids:
-                    raise ValueError(
-                        f"Target {node.target!r} on upgrade {node.id!r} "
-                        f"does not reference a valid node ID"
-                    )
+            if (
+                isinstance(node, Upgrade)
+                and node.target != "_all"
+                and node.target not in node_ids
+            ):
+                raise ValueError(
+                    f"Target {node.target!r} on upgrade {node.id!r} "
+                    f"does not reference a valid node ID"
+                )
+
+    def _validate_stacking_groups(self) -> None:
+        for node in self.nodes:
+            if isinstance(node, Upgrade) and node.stacking_group not in self.stacking_groups:
+                raise ValueError(
+                    f"Upgrade {node.id!r} references stacking_group "
+                    f"{node.stacking_group!r} which is not defined in "
+                    f"stacking_groups"
+                )
 
     def _validate_formulas(self) -> None:
         from idleframework.dsl.compiler import compile_formula

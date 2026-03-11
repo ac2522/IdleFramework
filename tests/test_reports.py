@@ -1,12 +1,13 @@
 """Tests for the HTML report generator (Plotly)."""
 import json
-import pytest
 from pathlib import Path
 
-from idleframework.model.game import GameDefinition
+import pytest
+
 from idleframework.analysis.detectors import AnalysisReport, run_full_analysis
-from idleframework.optimizer.greedy import OptimizeResult
 from idleframework.engine.events import PurchaseEvent
+from idleframework.model.game import GameDefinition
+from idleframework.optimizer.greedy import OptimizeResult
 from idleframework.reports.html import generate_report
 
 
@@ -74,7 +75,8 @@ class TestProductionCurves:
 
     def test_generator_names_in_chart(self, sample_analysis_report):
         html = generate_report(sample_analysis_report)
-        assert "lemonade" in html.lower() or "newspaper" in html.lower() or "carwash" in html.lower()
+        lower = html.lower()
+        assert "lemonade" in lower or "newspaper" in lower or "carwash" in lower
 
 
 class TestCdnOption:

@@ -1,11 +1,13 @@
 """End-to-end tests on MiniCap fixture."""
 import json
 import math
-import pytest
 from pathlib import Path
-from idleframework.model.game import GameDefinition
+
+import pytest
+
 from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_cost
+from idleframework.model.game import GameDefinition
 
 
 @pytest.fixture

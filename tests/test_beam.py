@@ -1,9 +1,11 @@
 """Tests for the beam search optimizer."""
 import json
-import pytest
 from pathlib import Path
-from idleframework.model.game import GameDefinition
+
+import pytest
+
 from idleframework.engine.segments import PiecewiseEngine
+from idleframework.model.game import GameDefinition
 from idleframework.optimizer.beam import BeamSearchOptimizer
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
@@ -78,7 +80,7 @@ class TestBeamDeterministic:
 
         for r in results[1:]:
             assert len(r.purchases) == len(results[0].purchases)
-            for p1, p2 in zip(results[0].purchases, r.purchases):
+            for p1, p2 in zip(results[0].purchases, r.purchases, strict=True):
                 assert p1.node_id == p2.node_id
                 assert p1.cost == pytest.approx(p2.cost, rel=1e-9)
             assert r.final_production == pytest.approx(results[0].final_production, rel=1e-9)

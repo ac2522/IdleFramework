@@ -56,7 +56,9 @@ def _normalize(mantissa: float, exponent: int) -> tuple[float, int]:
     if mantissa == 0.0:
         return 0.0, 0
 
-    if not math.isfinite(mantissa):
+    if math.isnan(mantissa):
+        raise ValueError("Cannot create BigFloat from NaN")
+    if math.isinf(mantissa):
         return mantissa, exponent
 
     negative = mantissa < 0
@@ -334,7 +336,10 @@ class BigFloat:
                 return False
             return False
 
-        return self.exponent == other.exponent and abs(self.mantissa - other.mantissa) < 1e-10
+        return (
+            self.exponent == other.exponent
+            and round(self.mantissa, 10) == round(other.mantissa, 10)
+        )
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, (BigFloat, int, float)):

@@ -1,8 +1,9 @@
 """Tests for formula DSL integration and graph validation in the engine."""
 import pytest
 from pydantic import ValidationError
-from idleframework.model.game import GameDefinition
+
 from idleframework.engine.segments import PiecewiseEngine
+from idleframework.model.game import GameDefinition
 
 
 class TestGraphValidationOnInit:

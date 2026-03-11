@@ -30,7 +30,7 @@ class GameState(BaseModel):
     lifetime_earnings: dict[str, float] = Field(default_factory=dict)
 
     @classmethod
-    def from_game(cls, game: "GameDefinition") -> "GameState":
+    def from_game(cls, game: GameDefinition) -> GameState:
         """Initialize state from a game definition."""
         from idleframework.model.nodes import Resource
 

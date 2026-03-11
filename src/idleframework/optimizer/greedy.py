@@ -49,7 +49,7 @@ class OptimizeResult:
 class GreedyOptimizer:
     """Greedy optimizer: always buy the highest-efficiency item next."""
 
-    def __init__(self, game: "GameDefinition", state: GameState | None = None):
+    def __init__(self, game: GameDefinition, state: GameState | None = None):
         self.game = game
         self.engine = PiecewiseEngine(game, state)
         self.steps: list[PurchaseStep] = []
@@ -342,15 +342,30 @@ class GreedyOptimizer:
                 count=1,
                 cost=step.cost,
             ))
+            prod_rate = (
+                self.engine.get_production_rate(pay_resource)
+                if pay_resource
+                else 0.0
+            )
             timeline.append({
                 "time": step.time,
-                "production_rate": self.engine.get_production_rate(pay_resource) if pay_resource else 0.0,
+                "production_rate": prod_rate,
             })
 
+        final_prod = (
+            self.engine.get_production_rate(pay_resource)
+            if pay_resource
+            else 0.0
+        )
+        final_bal = (
+            self.engine.get_balance(pay_resource)
+            if pay_resource
+            else 0.0
+        )
         return OptimizeResult(
             purchases=purchases,
             timeline=timeline,
-            final_production=self.engine.get_production_rate(pay_resource) if pay_resource else 0.0,
-            final_balance=self.engine.get_balance(pay_resource) if pay_resource else 0.0,
+            final_production=final_prod,
+            final_balance=final_bal,
             final_time=self.engine.current_time,
         )

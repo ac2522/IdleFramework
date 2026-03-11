@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import copy
 
-from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.events import PurchaseEvent
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.optimizer.greedy import GreedyOptimizer, OptimizeResult
 
 
@@ -121,6 +121,8 @@ class BranchAndBoundOptimizer:
                 else:
                     actual_cost = branch_engine.purchase(candidate["node_id"], 1)
             except ValueError:
+                # Expected: advance_to may auto-purchase, changing state
+                # so the candidate may no longer be valid. Skip this branch.
                 continue
 
             event = PurchaseEvent(

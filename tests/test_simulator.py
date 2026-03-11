@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-
+from simulator import rk4_step, simulate_constant_production, simulate_with_events
 
 from idleframework.model.nodes import Generator, Upgrade
 from idleframework.model.state import GameState
-
-from simulator import rk4_step, simulate_constant_production, simulate_with_events
-
 
 # ---------- RK4 Core Tests ----------
 

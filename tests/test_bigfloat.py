@@ -1,10 +1,10 @@
 """Unit tests for BigFloat number type."""
 
 import math
+
 import pytest
 
 from idleframework.bigfloat import BigFloat, format_bigfloat
-
 
 # ---------------------------------------------------------------------------
 # Construction

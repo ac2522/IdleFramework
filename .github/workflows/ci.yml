@@ -25,7 +25,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Lint with ruff
-        run: ruff check src/ tests/
+        run: ruff check src/ server/ tests/
 
       - name: Run tests
-        run: pytest -v --tb=short
+        run: pytest -v --tb=short --timeout=60
