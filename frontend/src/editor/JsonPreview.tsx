@@ -23,17 +23,17 @@ export default function JsonPreview({ nodes, edges, gameName }: JsonPreviewProps
   }, [open, nodes, edges, gameName])
 
   return (
-    <div className="border-t border-gray-700">
+    <div className="border-t border-gray-200 dark:border-gray-700">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full px-3 py-2 text-left text-sm font-medium text-gray-300 hover:bg-gray-700 focus:outline-none"
+        className="w-full px-3 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
       >
         {open ? '▾' : '▸'} JSON Preview
       </button>
 
       {open && (
-        <pre className="m-2 max-h-96 overflow-auto rounded bg-gray-900 p-3 text-xs text-green-400 font-mono">
+        <pre className="m-2 max-h-96 overflow-auto rounded bg-gray-100 dark:bg-gray-900 p-3 text-xs text-gray-800 dark:text-green-400 font-mono">
           {jsonText}
         </pre>
       )}

@@ -6,7 +6,7 @@ import type { Edge } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
 
 import type { EditorNode, EditorNodeData } from './types.ts'
-import { RESOURCE_EDGE_TYPES, resetNodeCounter } from './types.ts'
+import { RESOURCE_EDGE_TYPES } from './types.ts'
 
 // ---------- GameDefinition JSON types ----------
 
@@ -177,17 +177,6 @@ export function gameToGraph(game: GameDefinitionJSON): { nodes: EditorNode[]; ed
       }
     }
   }
-
-  // Reset node counter to max existing ID suffix
-  let maxId = 0
-  for (const node of editorNodes) {
-    const match = node.id.match(/\d+$/)
-    if (match) {
-      const num = parseInt(match[0], 10)
-      if (num > maxId) maxId = num
-    }
-  }
-  resetNodeCounter(maxId)
 
   return { nodes: editorNodes, edges: editorEdges }
 }

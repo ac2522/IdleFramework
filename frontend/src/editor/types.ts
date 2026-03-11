@@ -198,13 +198,8 @@ export const NODE_COLORS: Record<string, { bg: string; border: string; text: str
 
 // -- Default data factories for each node type --
 
-let _nodeCounter = 0
 export function nextNodeId(): string {
-  return `node_${++_nodeCounter}`
-}
-
-export function resetNodeCounter(max = 0): void {
-  _nodeCounter = max
+  return `node_${crypto.randomUUID().slice(0, 8)}`
 }
 
 export function defaultNodeData(nodeType: string, id: string): EditorNodeData {

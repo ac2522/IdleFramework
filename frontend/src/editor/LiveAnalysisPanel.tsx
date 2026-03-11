@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Edge } from '@xyflow/react'
 import { graphToGame } from './conversion.ts'
 import { runAnalysis } from '../api/analysis.ts'
-import { createGame } from '../api/games.ts'
+import { createGame, deleteGame } from '../api/games.ts'
 import type { AnalysisResult } from '../api/types.ts'
 import type { EditorNode } from './types.ts'
 
@@ -75,6 +75,7 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
   const [status, setStatus] = useState<AnalysisStatus>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const versionRef = useRef(0)
+  const draftGameIdRef = useRef<string | null>(null)
 
   const analyze = useCallback(async (
     currentNodes: EditorNode[],
@@ -93,14 +94,16 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
     setErrorMsg(null)
 
     try {
-      // Convert graph to game JSON
+      // Use a stable draft name so createGame overwrites the same file each time
+      const draftName = `_live-preview-${currentName || 'untitled'}`
       const gameJson = graphToGame(currentNodes, currentEdges, {
-        name: currentName || 'Untitled',
+        name: draftName,
         stacking_groups: {},
       })
 
-      // Save game to get an ID
+      // Save game (overwrites previous draft since slugified name is stable)
       const { id: gameId } = await createGame(gameJson as unknown as Record<string, unknown>)
+      draftGameIdRef.current = gameId
 
       // Discard if stale
       if (version !== versionRef.current) return
@@ -140,6 +143,16 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
 
     return () => clearTimeout(timer)
   }, [nodes, edges, gameName, analyze])
+
+  // Cleanup draft game on unmount
+  useEffect(() => {
+    return () => {
+      const draftId = draftGameIdRef.current
+      if (draftId) {
+        void deleteGame(draftId).catch(() => { /* best-effort cleanup */ })
+      }
+    }
+  }, [])
 
   // Compute production rate from optimizer result
   const productionRate = result?.optimizer_result?.final_production ?? null

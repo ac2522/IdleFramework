@@ -36,19 +36,29 @@ function EditorCanvas() {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
 
   const onConnect: OnConnect = useCallback(
-    (params) =>
+    (params) => {
+      // Infer edge type from source node type
+      const sourceNode = nodes.find((n) => n.id === params.source)
+      const sourceType = (sourceNode?.data as EditorNodeData | undefined)?.nodeType
+      const stateSourceTypes = new Set([
+        'upgrade', 'manager', 'achievement', 'unlock_gate', 'prestige_layer', 'sacrifice',
+      ])
+      const isState = sourceType != null && stateSourceTypes.has(sourceType)
+      const edgeType = isState ? 'state_modifier' : 'resource_flow'
+      const rfType = isState ? 'state' : 'resource'
+
       setEdges((eds) =>
         addEdge(
           {
             ...params,
-            type: 'resource',
-            label: 'resource flow',
-            data: { edgeType: 'resource_flow' },
+            type: rfType,
+            data: { edgeType },
           },
           eds,
         ),
-      ),
-    [setEdges],
+      )
+    },
+    [setEdges, nodes],
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
