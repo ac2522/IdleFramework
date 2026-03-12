@@ -61,7 +61,7 @@ class TickspeedNode(NodeBase):
 - Upgradeable via regular Upgrade nodes targeting the tickspeed node
 - State edges can modify `base_tickspeed` dynamically
 - Engine resolves final tickspeed = base_tickspeed * all applicable upgrade multipliers
-- A single game should have at most one TickspeedNode (validated)
+- A single game should have at most one TickspeedNode (validated in `GameDefinition._validate_game()` — raise if `len([n for n in nodes if n.type == "tickspeed"]) > 1`)
 
 #### 5.1.2 AutobuyerNode
 
@@ -75,7 +75,7 @@ class AutobuyerNode(NodeBase):
     interval: float = 1.0                 # Seconds between attempts
     priority: int = 0                     # Higher = buys first when competing
     condition: str | None = None          # DSL formula condition
-    bulk_amount: Literal[1, 10, "max"] = 1
+    bulk_amount: Literal["1", "10", "max"] = "1"  # String enum for clean JSON serialization
     enabled: bool = True                  # Toggleable via activator edges
 ```
 
@@ -86,17 +86,17 @@ class AutobuyerNode(NodeBase):
 
 #### 5.1.3 DrainNode
 
-Continuous resource consumption creating break-even dynamics.
+Continuous resource consumption creating break-even dynamics. Modeled as a graph node with a `consumption` edge to the target resource (consistent with the edge-based graph architecture — drain appears as a visible edge in the React Flow editor and participates in graph validation/analysis).
 
 ```python
 class DrainNode(NodeBase):
     type: Literal["drain"] = "drain"
     name: str = ""
-    target_resource: str        # Resource being consumed
     rate: float                 # Base consumption per second
     condition: str | None = None  # Only drains when condition is true
 ```
 
+- Target resource is specified by a `consumption` edge from DrainNode → Resource (not by a field)
 - Net production = generator rates - drain rates
 - If net < 0, resource depletes; engine handles zero-crossing time
 - `rate` modifiable via state edges (upgrades can reduce drain)
@@ -118,7 +118,7 @@ class BuffNode(NodeBase):
     cooldown: float = 0.0                # Minimum seconds between activations
 ```
 
-- **Timed buffs:** `effective_multiplier = 1 + (multiplier - 1) * (duration / (duration + cooldown))`
+- **Timed buffs:** Assumed to activate on a repeating cycle (auto-triggered). `effective_multiplier = 1 + (multiplier - 1) * (duration / (duration + cooldown))`. When `cooldown == 0`, the buff is always active and the effective multiplier equals the raw multiplier (a static multiplier — intentional).
 - **Proc buffs:** `effective_multiplier = 1 + proc_chance * (multiplier - 1)`
 - Folds into per-generator multiplier during production rate computation
 - All fields (`proc_chance`, `multiplier`, `duration`, `cooldown`) independently modifiable via state edges
@@ -140,7 +140,7 @@ class SynergyNode(NodeBase):
 - `formula_expr` evaluated each segment with source nodes' `owned` counts as variables
 - Result becomes a dynamic multiplier applied to `target` via stacking system
 - Example: `"owned_cursor * 0.001"` applied to grandma production (Cookie Clicker pattern)
-- Formula has access to all source node states via `owned_<source_id>` variables
+- **Variable naming:** Source node IDs are sanitized for formula use: hyphens and special characters replaced with underscores (e.g., node ID `"my-generator"` becomes variable `owned_my_generator`). Same sanitization applies to all formula variable namespaces (state edges, synergy formulas, etc.).
 
 ### 5.2 Enhanced Existing Nodes
 
@@ -154,7 +154,8 @@ class PrestigeLayer(NodeBase):
     layer_index: int
     reset_scope: list[str]
     persistence_scope: list[str]
-    bonus_type: str
+    bonus_type: Literal["multiplicative", "additive", "percentage"]
+    milestone_rules: list[dict] = []  # Existing field — preserved
     # New fields:
     currency_id: str | None = None       # Resource that stores prestige currency
     parent_layer: str | None = None      # Higher layer that resets this one
@@ -198,21 +199,21 @@ class Converter(NodeBase):
     conversion_limit: int | None = None    # Max conversions per cycle
 ```
 
-- `fixed`: constant input/output ratios
-- `scaling`: ratios change based on quantity converted (DSL formula per output)
+- `fixed`: constant input/output ratios (existing behavior)
+- `scaling`: output amounts change based on quantity converted. Each output entry gains an optional `formula: str | None` field in `ConverterIO` (the existing model at `nodes.py:20-22` which currently has `resource: str` and `amount: float`). When `recipe_type == "scaling"` and `formula` is set, the formula is evaluated with `conversion_count` as a variable to compute the actual output amount. When `formula` is None, falls back to fixed `amount`.
 - `conversion_limit`: caps throughput per engine cycle
 
 #### 5.2.4 ProbabilityNode — Engine-Evaluated Crit
 
-No model changes needed. Existing fields:
-- `crit_chance: float`
-- `crit_multiplier: float`
-- `expected_value: float`
-- `variance: float`
+No model changes needed. Existing fields: `crit_chance`, `crit_multiplier`, `expected_value`, `variance`.
 
-Engine now evaluates: `effective_rate = base_rate * (1 + crit_chance * (crit_multiplier - 1))`
+**Connection pattern:** A ProbabilityNode connects to a Generator via a `state_modifier` edge with `target_property: "base_production"` and `modifier_mode: "multiply"`. The engine discovers which ProbabilityNode applies to which generator by following these state_modifier edges. When computing production rates, the engine evaluates:
 
-State edges can target `crit_chance` and `crit_multiplier` independently, enabling upgrades like "Prestige Upgrade: +5% crit chance on Lemonade Stands."
+`crit_effective = 1 + crit_chance * (crit_multiplier - 1)`
+
+This value is applied as the state_modifier's formula result. If no ProbabilityNode is connected, generators use `crit_effective = 1.0`.
+
+State edges can target `crit_chance` and `crit_multiplier` independently, enabling upgrades like "Prestige Upgrade: +5% crit chance on Lemonade Stands." This is a NEW engine feature (the current engine does not evaluate ProbabilityNode at all).
 
 ### 5.3 Edge Model Enhancements
 
@@ -238,8 +239,8 @@ class Edge(BaseModel):
   - `set`: override property value
   - `add`: add to base value
   - `multiply`: multiply base value
-- Only required when `edge_type == "state_modifier"`
-- Validated: `target_property` must be a valid field on the target node type
+- Required when `edge_type == "state_modifier"` (new edges). For backward compatibility, existing `state_modifier` edges without `target_property` default to `target_property: None, modifier_mode: "multiply"` and apply the formula result as a general multiplier (preserving current behavior).
+- **Validation:** `target_property` must be a valid numeric field on the target node's Pydantic model. Validator introspects the target node type via `type(target_node).model_fields` and checks that the named field exists and has a numeric type (`float`, `int`, or `Optional[float]`). Invalid field names raise `ValidationError` at game load.
 
 ### 5.4 Engine Changes
 
@@ -269,21 +270,38 @@ Variables available in state edge formulas:
 
 #### 5.4.2 Revised Engine Loop
 
+The engine computes **gross rates** (from generators/buffs/synergies) and **drain rates** separately, then combines them into **net rates** used for time advancement and segment recording.
+
+Autobuyers introduce a new class of segment boundary: autobuyer fire times. The engine must consider these alongside purchase affordability times when finding the next event.
+
 ```
 PiecewiseEngine.advance_to(target_time):
     loop:
         1. apply_free_purchases()
-        2. evaluate_state_edges()              ← NEW
-        3. compute_tickspeed()                 ← NEW
-        4. compute_production_rates()          ← MODIFIED: ×tickspeed, +crit EV, +synergies
-        5. apply_drains()                      ← NEW: subtract drain rates
-        6. apply_resource_caps()               ← NEW: clamp to capacity
-        7. evaluate_buffs()                    ← NEW: fold expected-value multipliers
-        8. evaluate_autobuyers()               ← NEW: auto-purchases at intervals
-        9. find_next_purchase()                ← MODIFIED: skip autobuyer targets
-        10. advance time, record segment
-        11. if past target_time: break
+        2. evaluate_state_edges()              ← NEW: returns modified_properties map
+        3. compute_tickspeed()                 ← NEW: reads from modified_properties
+        4. evaluate_buffs()                    ← NEW: compute EV multipliers (global + per-generator)
+        5. compute_gross_rates()               ← MODIFIED: ×tickspeed, ×crit EV, ×synergies, ×buff EV
+        6. compute_drain_rates()               ← NEW: collect active drains per resource
+        7. net_rates = gross_rates - drain_rates   ← NEW: per-resource net production
+        8. apply_resource_caps()               ← NEW: if at capacity, clamp net_rate to 0
+        9. find_next_event()                   ← MODIFIED: considers 3 event types:
+              a. next_purchase_time (existing: most efficient affordable item)
+              b. next_autobuyer_time (NEW: earliest autobuyer fire time)
+              c. next_zero_crossing (NEW: earliest resource depletion from negative net_rate)
+              → pick earliest event
+        10. advance time to event, update balances using net_rates
+        11. execute event (purchase / autobuyer fire / drain zero-crossing handler)
+        12. record segment (with gross_rates, drain_rates, net_rates, tickspeed)
+        13. if past target_time: break
 ```
+
+**Key data flow:**
+- `gross_rates: dict[str, float]` — per-resource production before drains
+- `drain_rates: dict[str, float]` — per-resource drain totals
+- `net_rates: dict[str, float]` — gross - drain, clamped by capacity
+- `buff_multipliers: {global: float, per_generator: dict[str, float]}` — from step 4
+- All three rate types recorded in Segment for analysis/reporting
 
 #### 5.4.3 Tickspeed Resolution
 
@@ -302,48 +320,102 @@ All generator rates multiplied by this value in step 4.
 #### 5.4.4 Drain Processing
 
 ```
-apply_drains():
+compute_drain_rates() -> dict[str, float]:
+    drain_rates = defaultdict(float)
     for each DrainNode:
+        target_resource = get_consumption_edge_target(drain)  # via consumption edge
         if condition is None or evaluate(condition) is truthy:
-            resource = state[drain.target_resource]
-            net_rate[resource] -= drain.rate
-    # Handle zero-crossing: if net_rate < 0 and resource > 0,
-    # compute time_to_zero = resource.current_value / abs(net_rate)
-    # Create segment boundary at zero-crossing
+            drain_rates[target_resource] += drain.rate
+    return drain_rates
+
+# Zero-crossing is handled in find_next_event() (step 9c):
+# For each resource with net_rate < 0 and current_value > 0:
+#   time_to_zero = current_value / abs(net_rate)
+#   This becomes a candidate event alongside purchases and autobuyers
 ```
 
 #### 5.4.5 Buff Processing
 
+Returns multiplier structures consumed by `compute_gross_rates()` in step 5.
+
 ```
-evaluate_buffs():
+evaluate_buffs() -> BuffMultipliers:
+    global_multiplier = 1.0
+    per_generator = defaultdict(lambda: 1.0)
+
     for each BuffNode:
         if buff_type == "timed":
-            ev = 1 + (multiplier - 1) * (duration / (duration + cooldown))
+            if cooldown == 0:
+                ev = multiplier  # Always active — static multiplier
+            else:
+                ev = 1 + (multiplier - 1) * (duration / (duration + cooldown))
         elif buff_type == "proc":
             ev = 1 + proc_chance * (multiplier - 1)
 
         if target is None:  # global
             global_multiplier *= ev
         else:
-            per_generator_multiplier[target] *= ev
+            per_generator[target] *= ev
+
+    return BuffMultipliers(global_multiplier, per_generator)
+
+# compute_gross_rates() uses these:
+#   rate = base_production * owned / cycle_time * stacking * tickspeed
+#          * crit_ev * buff_global * buff_per_generator.get(gen_id, 1.0)
 ```
 
 #### 5.4.6 Autobuyer Processing
 
+Autobuyers create segment boundaries at their fire times. Rather than evaluating inside the main loop body, autobuyer fire times are computed in `find_next_event()` and executed as events.
+
 ```
-evaluate_autobuyers():
-    active_autobuyers = [a for a in autobuyers if a.enabled and unlocked(a)]
-    sort by priority (descending)
-    for each autobuyer:
-        time_since_last = elapsed - autobuyer_last_fired[a.id]
-        if time_since_last >= a.interval:
-            if condition is None or evaluate(condition):
-                if can_afford(a.target, a.bulk_amount):
-                    purchase(a.target, a.bulk_amount)
-                    autobuyer_last_fired[a.id] = elapsed
+# In find_next_event() (step 9b):
+next_autobuyer_fire_times():
+    for each active autobuyer (enabled and unlocked):
+        last_fired = autobuyer_state[a.id].last_fired  # from NodeState
+        next_fire = last_fired + a.interval
+        if next_fire <= target_time:
+            candidates.append((next_fire, "autobuyer", a.id))
+
+# When an autobuyer event fires (step 11):
+execute_autobuyer(autobuyer_id):
+    a = game.get_node(autobuyer_id)
+    if condition is None or evaluate(condition):
+        amount = resolve_bulk(a.bulk_amount, a.target, state)
+        if can_afford(a.target, amount):
+            purchase(a.target, amount)
+    autobuyer_state[a.id].last_fired = current_time
 ```
 
-#### 5.4.7 Multi-Layer Prestige
+**Performance consideration:** Many autobuyers at short intervals create many segment boundaries. Mitigation: if multiple autobuyers fire at the same time (within `event_epsilon`), batch them into a single event. For games with many autobuyers, the optimizer may coalesce adjacent identical-rate segments.
+
+#### 5.4.7 GameState Extensions
+
+New fields required by new mechanics:
+
+```python
+class NodeState(BaseModel):
+    # Existing fields...
+    owned: int = 0
+    current_value: float = 0.0
+    level: int = 0
+    purchased: bool = False
+    active: bool = True
+    total_production: float = 0.0
+    # New fields:
+    last_fired: float = 0.0          # For autobuyers: last fire timestamp
+
+class GameState(BaseModel):
+    # Existing fields...
+    node_states: dict[str, NodeState]
+    elapsed_time: float = 0.0
+    run_time: float = 0.0
+    lifetime_earnings: dict[str, float]
+    # New fields:
+    layer_run_times: dict[str, float] = {}  # Per prestige layer run tracking
+```
+
+#### 5.4.8 Multi-Layer Prestige
 
 ```
 execute_prestige(layer_id):
@@ -356,18 +428,35 @@ execute_prestige(layer_id):
     if layer.currency_id:
         state[layer.currency_id].current_value += gain
 
-    # Reset all lower layers
+    # Reset all lower layers (cascading)
     for lower_layer in layers where layer_index < layer.layer_index:
         execute_reset(lower_layer.reset_scope, lower_layer.persistence_scope)
+        state.layer_run_times[lower_layer.id] = 0.0
 
     # Reset this layer's scope
     execute_reset(layer.reset_scope, layer.persistence_scope)
+    state.layer_run_times[layer.id] = 0.0
 
-    # Reset run_time (for this layer's run tracking)
-    state.run_time = 0.0
+execute_reset(reset_scope: list[str], persistence_scope: list[str]):
+    """Reset all nodes in reset_scope EXCEPT those in persistence_scope."""
+    nodes_to_reset = set(reset_scope) - set(persistence_scope)
+    for node_id in nodes_to_reset:
+        ns = state.node_states[node_id]
+        node = game.get_node(node_id)
+        if node.type == "resource":
+            ns.current_value = node.initial_value  # Reset to initial, not zero
+        elif node.type == "generator":
+            ns.owned = 0
+            ns.total_production = 0.0
+        elif node.type == "upgrade":
+            ns.purchased = False
+        elif node.type == "autobuyer":
+            ns.last_fired = 0.0
+        # Preserves: achievements (permanent=True), prestige currency resources,
+        # upgrades purchased with higher-layer currency (in persistence_scope)
 ```
 
-#### 5.4.8 Milestone Thresholds (Composable Approach)
+#### 5.4.9 Milestone Thresholds (Composable Approach)
 
 No engine changes needed. Milestones are modeled as:
 - `UnlockGate` with `condition_type: "ownership"` and `targets: ["generator_id"]`
@@ -487,10 +576,10 @@ State modifier edges get two new fields in edge property panel:
 Group nodes by function for better discoverability:
 
 - **Flow:** Resource, Generator, NestedGenerator, Converter
-- **Modifiers:** Upgrade, BuffNode, SynergyNode, DrainNode
+- **Modifiers:** Upgrade, BuffNode, SynergyNode, DrainNode, ProbabilityNode
 - **Automation:** Manager, AutobuyerNode, TickspeedNode
 - **Progression:** PrestigeLayer, UnlockGate, Achievement, SacrificeNode
-- **Logic:** Register, Gate, Queue, ChoiceGroup, ProbabilityNode, EndCondition
+- **Logic:** Register, Gate, Queue, ChoiceGroup, EndCondition
 
 ### 6.6 graphToGame / gameToGraph
 
@@ -558,6 +647,7 @@ def efficiency_scores(productions: np.ndarray, costs: np.ndarray) -> np.ndarray:
 
 - Functions operate on primitives (float, int, numpy arrays), not BigFloat
 - Convert at boundary between engine and Numba functions
+- **Precision limitation:** float64 has a range of ~10^308. For games with costs exceeding this, Numba-accelerated functions cannot be used. The engine detects when values exceed float64 range and falls back to pure-Python BigFloat paths automatically.
 - Graceful fallback if Numba not installed (use plain Python versions)
 
 ### 7.4 NumPy Struct-of-Arrays
@@ -599,6 +689,6 @@ production = rates * owned / cycles * multipliers * tickspeed
 
 | Phase | Scope | Key Deliverables |
 |---|---|---|
-| 5 | All new mechanics | 5 new node types, 4 enhanced nodes, state edge evaluation, revised engine loop, optimizer awareness, tests |
+| 5 | All new mechanics | 5 new node types, 3 enhanced nodes (PrestigeLayer, Resource, Converter) + 1 newly engine-evaluated node (ProbabilityNode), state edge evaluation, revised engine loop, GameState extensions, optimizer awareness, tests |
 | 6 | UI integration | 5 new React Flow components, enhanced property panels, edge enhancements, palette reorganization |
 | 7 | Performance | Profiling baselines, Cython BigFloat, Numba inner loops, NumPy batch ops, benchmark comparison |
