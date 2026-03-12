@@ -83,6 +83,7 @@ class AutobuyerNode(NodeBase):
 - Unlockable via UnlockGate (e.g., unlock autobuyer after buying 100 generators)
 - `interval` and `priority` modifiable via state edges
 - `condition` evaluated each interval tick (e.g., `"balance > cost * 2"`)
+- **Relationship to Manager node:** The existing `Manager` node (with `automation_type: "buy"`) provides simple auto-purchasing without interval, priority, condition, or bulk controls. AutobuyerNode is the richer version. Both coexist — Manager for simple "always buy when affordable" automation, AutobuyerNode for configurable automation. Neither deprecates the other.
 
 #### 5.1.3 DrainNode
 
@@ -96,7 +97,7 @@ class DrainNode(NodeBase):
     condition: str | None = None  # Only drains when condition is true
 ```
 
-- Target resource is specified by a `consumption` edge from DrainNode → Resource (not by a field)
+- Target resource is specified by a `consumption` edge from DrainNode → Resource (not by a field). Note: `consumption` edges are already used by Converters — the engine discriminates by checking the source node type (DrainNode vs Converter) when processing consumption edges.
 - Net production = generator rates - drain rates
 - If net < 0, resource depletes; engine handles zero-crossing time
 - `rate` modifiable via state edges (upgrades can reduce drain)
@@ -389,9 +390,26 @@ execute_autobuyer(autobuyer_id):
 
 **Performance consideration:** Many autobuyers at short intervals create many segment boundaries. Mitigation: if multiple autobuyers fire at the same time (within `event_epsilon`), batch them into a single event. For games with many autobuyers, the optimizer may coalesce adjacent identical-rate segments.
 
-#### 5.4.7 GameState Extensions
+#### 5.4.7 Data Structure Extensions
 
-New fields required by new mechanics:
+**Segment dataclass** — extend with new fields:
+
+```python
+@dataclass
+class Segment:
+    # Existing fields...
+    start_time: float
+    end_time: float | None
+    production_rates: dict[str, float]   # Renamed role: now represents gross rates
+    multiplier: float
+    events: list[str]
+    # New fields:
+    drain_rates: dict[str, float] = field(default_factory=dict)
+    net_rates: dict[str, float] = field(default_factory=dict)
+    tickspeed: float = 1.0
+```
+
+**NodeState and GameState** — new fields required by new mechanics:
 
 ```python
 class NodeState(BaseModel):
