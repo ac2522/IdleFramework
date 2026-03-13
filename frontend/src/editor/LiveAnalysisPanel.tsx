@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Edge } from '@xyflow/react'
+import Plot from 'react-plotly.js'
+import type Plotly from 'plotly.js'
 import { graphToGame } from './conversion.ts'
 import { runAnalysis } from '../api/analysis.ts'
+import { compareStrategies } from '../api/analysis.ts'
 import { createGame, deleteGame } from '../api/games.ts'
 import type { AnalysisResult } from '../api/types.ts'
+import type { CompareResult } from '../api/types.ts'
 import type { EditorNode } from './types.ts'
 
 // -- Status types --
@@ -70,10 +74,234 @@ function ResultRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function SkeletonRows() {
+  return (
+    <div className="space-y-2 animate-pulse">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex justify-between items-baseline py-1">
+          <div className="h-3 w-24 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-12 rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MiniCharts({ result }: { result: AnalysisResult }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const opt = result.optimizer_result
+  if (!opt) {
+    return (
+      <div className="mt-3">
+        <p className="text-xs text-gray-400 dark:text-gray-500">No optimizer data for charts.</p>
+      </div>
+    )
+  }
+
+  const darkMode =
+    typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+
+  const layoutBase: Partial<Plotly.Layout> = {
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: darkMode ? '#9ca3af' : '#6b7280', size: 9 },
+    margin: { l: 30, r: 8, t: 4, b: 24 },
+    xaxis: {
+      gridcolor: darkMode ? '#374151' : '#f3f4f6',
+      zerolinecolor: darkMode ? '#4b5563' : '#e5e7eb',
+    },
+    yaxis: {
+      gridcolor: darkMode ? '#374151' : '#f3f4f6',
+      zerolinecolor: darkMode ? '#4b5563' : '#e5e7eb',
+    },
+  }
+
+  const plotConfig: Partial<Plotly.Config> = {
+    responsive: true,
+    displayModeBar: false,
+    staticPlot: false,
+  }
+
+  const timelineX = opt.timeline.map((t) => t.time)
+  const timelineY = opt.timeline.map((t) => t.production_rate)
+
+  const costByNode: Record<string, number> = {}
+  for (const p of opt.purchases) {
+    costByNode[p.node_id] = (costByNode[p.node_id] ?? 0) + p.cost * p.count
+  }
+  const barLabels = Object.keys(costByNode)
+  const barValues = Object.values(costByNode)
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 hover:text-gray-700 dark:hover:text-gray-300"
+      >
+        <svg
+          className={`h-3 w-3 transition-transform ${collapsed ? '' : 'rotate-90'}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        Charts
+      </button>
+
+      {!collapsed && (
+        <div className="space-y-3">
+          {timelineX.length > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Production Rate</p>
+              <Plot
+                data={[
+                  {
+                    x: timelineX,
+                    y: timelineY,
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#3b82f6', width: 1.5 },
+                    hovertemplate: 't=%{x:.0f}s<br>rate=%{y:.2f}<extra></extra>',
+                  },
+                ]}
+                layout={{
+                  ...layoutBase,
+                  height: 120,
+                  showlegend: false,
+                }}
+                config={plotConfig}
+                useResizeHandler
+                style={{ width: '100%', height: '120px' }}
+              />
+            </div>
+          )}
+
+          {barLabels.length > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">Cost Distribution</p>
+              <Plot
+                data={[
+                  {
+                    x: barLabels,
+                    y: barValues,
+                    type: 'bar',
+                    marker: {
+                      color: barLabels.map(
+                        (_, i) =>
+                          ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'][i % 6],
+                      ),
+                    },
+                    hovertemplate: '%{x}<br>cost=%{y:.2f}<extra></extra>',
+                  },
+                ]}
+                layout={{
+                  ...layoutBase,
+                  height: 120,
+                  showlegend: false,
+                }}
+                config={plotConfig}
+                useResizeHandler
+                style={{ width: '100%', height: '120px' }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CompareTagsSection({ gameId, nodes }: { gameId: string | null; nodes: EditorNode[] }) {
+  const [compareResult, setCompareResult] = useState<CompareResult | null>(null)
+  const [comparing, setComparing] = useState(false)
+
+  const uniqueTags = Array.from(
+    new Set(nodes.flatMap((n) => n.data.tags ?? []))
+  )
+
+  if (uniqueTags.length === 0 || !gameId) return null
+
+  async function handleCompare() {
+    if (!gameId) return
+    setComparing(true)
+    try {
+      const result = await compareStrategies({
+        game_id: gameId,
+        strategies: uniqueTags,
+      })
+      setCompareResult(result)
+    } catch {
+      setCompareResult(null)
+    } finally {
+      setComparing(false)
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
+        Tag Comparison
+      </p>
+
+      {!compareResult && (
+        <button
+          type="button"
+          onClick={handleCompare}
+          disabled={comparing}
+          className="w-full rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {comparing ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-white animate-pulse" />
+              Comparing...
+            </span>
+          ) : (
+            'Compare Tags'
+          )}
+        </button>
+      )}
+
+      {compareResult && (
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-baseline py-0.5">
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">Baseline</span>
+            <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
+              {formatNumber(compareResult.baseline.final_production)}/s
+            </span>
+          </div>
+          {Object.entries(compareResult.variants).map(([tag, data]) => {
+            const pct = (data.ratio_vs_baseline * 100).toFixed(1)
+            const isWorse = data.ratio_vs_baseline < 1
+            return (
+              <div key={tag} className="flex justify-between items-baseline py-0.5">
+                <span className="text-xs text-gray-600 dark:text-gray-400">Without &quot;{tag}&quot;</span>
+                <span className={`text-xs font-medium ${isWorse ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {pct}%
+                </span>
+              </div>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setCompareResult(null)}
+            className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            Re-run comparison
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalysisPanelProps) {
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [status, setStatus] = useState<AnalysisStatus>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [lastGameId, setLastGameId] = useState<string | null>(null)
   const versionRef = useRef(0)
   const draftGameIdRef = useRef<string | null>(null)
 
@@ -104,6 +332,7 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
       // Save game (overwrites previous draft since slugified name is stable)
       const { id: gameId } = await createGame(gameJson as unknown as Record<string, unknown>)
       draftGameIdRef.current = gameId
+      setLastGameId(gameId)
 
       // Discard if stale
       if (version !== versionRef.current) return
@@ -139,7 +368,7 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
 
     const timer = setTimeout(() => {
       void analyze(nodes, edges, gameName, version)
-    }, 1000)
+    }, 400)
 
     return () => clearTimeout(timer)
   }, [nodes, edges, gameName, analyze])
@@ -169,6 +398,8 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
       {status === 'error' && errorMsg && (
         <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">{errorMsg}</p>
       )}
+
+      {status === 'analyzing' && !result && <SkeletonRows />}
 
       {result && status !== 'error' && (
         <div className="space-y-1">
@@ -217,6 +448,9 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
               </ul>
             </div>
           )}
+
+          <MiniCharts result={result} />
+          <CompareTagsSection gameId={lastGameId} nodes={nodes} />
         </div>
       )}
 
