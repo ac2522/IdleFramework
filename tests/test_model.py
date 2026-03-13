@@ -904,3 +904,126 @@ def test_synergy_node_creation():
     assert node.type == "synergy"
     assert len(node.sources) == 2
     assert node.formula_expr == "owned_gen_cursor * 0.001"
+
+
+# --- Task 6: Edge target_property and modifier_mode ---
+def test_edge_state_modifier_with_target_property():
+    from idleframework.model.edges import Edge
+
+    edge = Edge(
+        id="e1", source="upg1", target="gen1",
+        edge_type="state_modifier",
+        formula="owned * 0.05",
+        target_property="crit_chance",
+        modifier_mode="add",
+    )
+    assert edge.target_property == "crit_chance"
+    assert edge.modifier_mode == "add"
+
+def test_edge_backward_compat_no_target_property():
+    from idleframework.model.edges import Edge
+
+    edge = Edge(
+        id="e1", source="upg1", target="gen1",
+        edge_type="state_modifier",
+        formula="2.0",
+    )
+    assert edge.target_property is None
+    assert edge.modifier_mode is None
+
+
+# --- Task 7: PrestigeLayer multi-layer fields ---
+def test_prestige_layer_multi_layer_fields():
+    from idleframework.model.nodes import PrestigeLayer
+
+    node = PrestigeLayer(
+        id="p1",
+        formula_expr="floor(sqrt(lifetime))",
+        layer_index=1,
+        reset_scope=["gen1", "res1"],
+        currency_id="prestige_currency",
+        parent_layer="p2",
+    )
+    assert node.currency_id == "prestige_currency"
+    assert node.parent_layer == "p2"
+
+def test_prestige_layer_backward_compat():
+    from idleframework.model.nodes import PrestigeLayer
+
+    node = PrestigeLayer(
+        id="p1",
+        formula_expr="floor(sqrt(lifetime))",
+        layer_index=0,
+        reset_scope=["gen1"],
+    )
+    assert node.currency_id is None
+    assert node.parent_layer is None
+
+
+# --- Task 8: Resource capacity ---
+def test_resource_capacity():
+    from idleframework.model.nodes import Resource
+
+    node = Resource(id="r1", name="Gold", capacity=1000.0)
+    assert node.capacity == 1000.0
+    assert node.overflow_behavior == "clamp"
+
+def test_resource_no_capacity():
+    from idleframework.model.nodes import Resource
+
+    node = Resource(id="r1", name="Gold")
+    assert node.capacity is None
+
+
+# --- Task 9: Converter recipe_type, conversion_limit, ConverterIO formula ---
+def test_converter_io_with_formula():
+    from idleframework.model.nodes import ConverterIO
+
+    cio = ConverterIO(resource="gold", amount=10.0, formula="conversion_count * 0.9")
+    assert cio.formula == "conversion_count * 0.9"
+
+def test_converter_io_no_formula():
+    from idleframework.model.nodes import ConverterIO
+
+    cio = ConverterIO(resource="gold", amount=10.0)
+    assert cio.formula is None
+
+def test_converter_scaling_recipe():
+    from idleframework.model.nodes import Converter, ConverterIO
+
+    node = Converter(
+        id="c1",
+        inputs=[ConverterIO(resource="wood", amount=5.0)],
+        outputs=[ConverterIO(resource="plank", amount=2.0, formula="2 * conversion_count ** 0.5")],
+        rate=1.0,
+        recipe_type="scaling",
+        conversion_limit=100,
+    )
+    assert node.recipe_type == "scaling"
+    assert node.conversion_limit == 100
+
+
+# --- Task 10: NodeState last_fired, GameState layer_run_times ---
+def test_node_state_last_fired():
+    from idleframework.model.state import NodeState
+
+    ns = NodeState(last_fired=5.0)
+    assert ns.last_fired == 5.0
+
+def test_node_state_last_fired_default():
+    from idleframework.model.state import NodeState
+
+    ns = NodeState()
+    assert ns.last_fired == 0.0
+
+def test_game_state_layer_run_times():
+    from idleframework.model.state import GameState, NodeState
+
+    gs = GameState(node_states={}, layer_run_times={"p1": 100.0})
+    assert gs.layer_run_times["p1"] == 100.0
+
+def test_game_state_layer_run_times_default():
+    from idleframework.model.state import GameState
+
+    gs = GameState(node_states={})
+    assert gs.layer_run_times == {}

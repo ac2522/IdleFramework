@@ -22,6 +22,7 @@ class ConverterIO(BaseModel):
 
     resource: str
     amount: float
+    formula: str | None = None
 
 
 # ---------- NodeBase ----------
@@ -44,6 +45,8 @@ class Resource(NodeBase):
     type: Literal["resource"] = "resource"
     name: str
     initial_value: float = 0.0
+    capacity: float | None = None
+    overflow_behavior: Literal["clamp", "waste"] = "clamp"
 
 
 class Generator(NodeBase):
@@ -85,6 +88,8 @@ class PrestigeLayer(NodeBase):
     persistence_scope: list[str] = Field(default_factory=list)
     bonus_type: Literal["multiplicative", "additive", "percentage"] = "multiplicative"
     milestone_rules: list[dict] = Field(default_factory=list)
+    currency_id: str | None = None
+    parent_layer: str | None = None
 
 
 class SacrificeNode(NodeBase):
@@ -119,6 +124,8 @@ class Converter(NodeBase):
     outputs: list[ConverterIO]
     rate: float = 1.0
     pull_mode: Literal["pull_any", "pull_all"] = "pull_any"
+    recipe_type: Literal["fixed", "scaling"] = "fixed"
+    conversion_limit: int | None = None
 
 
 class ProbabilityNode(NodeBase):
