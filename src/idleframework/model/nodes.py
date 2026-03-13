@@ -1,4 +1,4 @@
-"""All 17 node types as Pydantic v2 models with discriminated union."""
+"""All 22 node types as Pydantic v2 models with discriminated union."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class NodeBase(BaseModel):
     cooldown_time: float | None = None
 
 
-# ---------- 17 Node types ----------
+# ---------- 22 Node types ----------
 
 
 class Resource(NodeBase):
@@ -183,12 +183,56 @@ class Queue(NodeBase):
     capacity: int | None = None
 
 
+class TickspeedNode(NodeBase):
+    type: Literal["tickspeed"] = "tickspeed"
+    name: str = "Tickspeed"
+    base_tickspeed: float = 1.0
+
+
+class AutobuyerNode(NodeBase):
+    type: Literal["autobuyer"] = "autobuyer"
+    name: str = ""
+    target: str
+    interval: float = 1.0
+    priority: int = 0
+    condition: str | None = None
+    bulk_amount: Literal["1", "10", "max"] = "1"
+    enabled: bool = True
+
+
+class DrainNode(NodeBase):
+    type: Literal["drain"] = "drain"
+    name: str = ""
+    rate: float
+    condition: str | None = None
+
+
+class BuffNode(NodeBase):
+    type: Literal["buff"] = "buff"
+    name: str = ""
+    buff_type: Literal["timed", "proc"]
+    duration: float | None = None
+    proc_chance: float | None = None
+    multiplier: float = 2.0
+    target: str | None = None
+    cooldown: float = 0.0
+
+
+class SynergyNode(NodeBase):
+    type: Literal["synergy"] = "synergy"
+    name: str = ""
+    sources: list[str]
+    formula_expr: str
+    target: str
+
+
 # ---------- Discriminated Union ----------
 
 NodeUnion = Annotated[
     Resource | Generator | NestedGenerator | Upgrade | PrestigeLayer
     | SacrificeNode | Achievement | Manager | Converter
     | ProbabilityNode | EndCondition | UnlockGate | ChoiceGroup
-    | Register | Gate | Queue,
+    | Register | Gate | Queue
+    | TickspeedNode | AutobuyerNode | DrainNode | BuffNode | SynergyNode,
     Field(discriminator="type"),
 ]

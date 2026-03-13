@@ -7,6 +7,14 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from idleframework.model.nodes import (
+    AutobuyerNode,
+    BuffNode,
+    DrainNode,
+    SynergyNode,
+    TickspeedNode,
+)
+
 # ---------- Node construction tests (all 17 types) ----------
 
 
@@ -828,3 +836,71 @@ class TestGameState:
         state = GameState.from_game(game)
         with pytest.raises(KeyError):
             state.get("nonexistent")
+
+
+# --- Task 1: TickspeedNode ---
+def test_tickspeed_node_creation():
+    node = TickspeedNode(id="ts1", base_tickspeed=1.5)
+    assert node.type == "tickspeed"
+    assert node.base_tickspeed == 1.5
+    assert node.name == "Tickspeed"
+
+def test_tickspeed_node_default():
+    node = TickspeedNode(id="ts1")
+    assert node.base_tickspeed == 1.0
+
+# --- Task 2: AutobuyerNode ---
+def test_autobuyer_node_creation():
+    node = AutobuyerNode(id="ab1", target="gen1", interval=2.0, priority=5)
+    assert node.type == "autobuyer"
+    assert node.target == "gen1"
+    assert node.interval == 2.0
+    assert node.priority == 5
+    assert node.bulk_amount == "1"
+    assert node.enabled is True
+    assert node.condition is None
+
+def test_autobuyer_node_with_condition():
+    node = AutobuyerNode(id="ab1", target="gen1", condition="balance > cost * 2", bulk_amount="max")
+    assert node.condition == "balance > cost * 2"
+    assert node.bulk_amount == "max"
+
+# --- Task 3: DrainNode ---
+def test_drain_node_creation():
+    node = DrainNode(id="drain1", rate=5.0)
+    assert node.type == "drain"
+    assert node.rate == 5.0
+    assert node.condition is None
+
+def test_drain_node_with_condition():
+    node = DrainNode(id="drain1", rate=3.0, condition="active == 1")
+    assert node.condition == "active == 1"
+
+# --- Task 4: BuffNode ---
+def test_buff_node_timed():
+    node = BuffNode(id="b1", buff_type="timed", duration=10.0, multiplier=3.0, cooldown=50.0)
+    assert node.type == "buff"
+    assert node.buff_type == "timed"
+    assert node.duration == 10.0
+    assert node.cooldown == 50.0
+
+def test_buff_node_proc():
+    node = BuffNode(id="b1", buff_type="proc", proc_chance=0.05, multiplier=2.0)
+    assert node.proc_chance == 0.05
+    assert node.target is None
+
+def test_buff_node_zero_cooldown():
+    node = BuffNode(id="b1", buff_type="timed", duration=10.0, multiplier=5.0, cooldown=0.0)
+    assert node.cooldown == 0.0
+
+# --- Task 5: SynergyNode ---
+def test_synergy_node_creation():
+    node = SynergyNode(
+        id="syn1",
+        sources=["gen_cursor", "gen_grandma"],
+        formula_expr="owned_gen_cursor * 0.001",
+        target="gen_grandma",
+    )
+    assert node.type == "synergy"
+    assert len(node.sources) == 2
+    assert node.formula_expr == "owned_gen_cursor * 0.001"
