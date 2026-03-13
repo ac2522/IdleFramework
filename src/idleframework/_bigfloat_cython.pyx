@@ -1,0 +1,3 @@
+# Placeholder for future Cython BigFloat implementation
+# To compile: cython _bigfloat_cython.pyx && gcc ...
+# For now, pure Python BigFloat is used (see bigfloat.py)
