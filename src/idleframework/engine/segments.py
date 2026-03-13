@@ -17,7 +17,7 @@ from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
 from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
-from idleframework.model.nodes import Generator, PrestigeLayer, Register, Resource, Upgrade
+from idleframework.model.nodes import Generator, PrestigeLayer, Register, Resource, TickspeedNode, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -71,6 +71,12 @@ class PiecewiseEngine:
                 self._generators[node.id] = node
             elif isinstance(node, Upgrade):
                 self._upgrades[node.id] = node
+
+        self._tickspeed_node: TickspeedNode | None = None
+        for node in self._game.nodes:
+            if isinstance(node, TickspeedNode):
+                self._tickspeed_node = node
+                break
 
     # -- Properties ----------------------------------------------------------
 
@@ -131,6 +137,7 @@ class PiecewiseEngine:
 
         # Build per-generator multiplier from upgrades
         gen_multipliers = self._compute_generator_multipliers()
+        tickspeed = self.compute_tickspeed()
 
         for node in self._game.nodes:
             if not isinstance(node, Generator):
@@ -140,7 +147,7 @@ class PiecewiseEngine:
                 continue
 
             gen_mult = gen_multipliers.get(node.id, 1.0)
-            rate = node.base_production * ns.owned / node.cycle_time * gen_mult
+            rate = node.base_production * ns.owned / node.cycle_time * gen_mult * tickspeed
 
             # Find which resource(s) this generator produces to
             for edge in self._game.get_edges_from(node.id):
@@ -210,6 +217,32 @@ class PiecewiseEngine:
                 result[gid] = compute_final_multiplier(merged)
 
         return result
+
+    def compute_tickspeed(self) -> float:
+        """Resolve the current tickspeed multiplier."""
+        if self._tickspeed_node is None:
+            return 1.0
+        base = self._tickspeed_node.base_tickspeed
+
+        # Collect upgrades targeting the tickspeed node
+        ts_id = self._tickspeed_node.id
+        ts_groups: dict[str, dict] = {}
+        for node in self._game.nodes:
+            if not isinstance(node, Upgrade):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.purchased:
+                continue
+            if node.target != ts_id:
+                continue
+            sg = node.stacking_group
+            rule = self._game.stacking_groups.get(sg, "multiplicative")
+            if sg not in ts_groups:
+                ts_groups[sg] = {"rule": rule, "bonuses": []}
+            ts_groups[sg]["bonuses"].append(node.magnitude)
+
+        mult = compute_final_multiplier(ts_groups) if ts_groups else 1.0
+        return base * mult
 
     # -- Next purchase -------------------------------------------------------
 
