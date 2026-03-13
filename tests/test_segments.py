@@ -11,7 +11,7 @@ from simulator import simulate_constant_production
 from idleframework.engine.events import (
     classify_formula_tier,
 )
-from idleframework.engine.segments import PiecewiseEngine
+from idleframework.engine.segments import PiecewiseEngine, Segment
 from idleframework.model.game import GameDefinition
 from idleframework.model.state import GameState
 
@@ -560,3 +560,33 @@ class TestUpgradePurchaseChangesMultiplier:
         # Total cash should be more than 10*30=300 (no upgrade case)
         # With upgrade bought at ~10s: 10*10 - 100 (buy) + 30*20 = 0 + 600 = 600
         assert engine.state.get_resource_value("cash") > 300.0
+
+
+# ---------------------------------------------------------------------------
+# Task 11: Segment new fields
+# ---------------------------------------------------------------------------
+
+
+def test_segment_new_fields():
+    seg = Segment(
+        start_time=0.0,
+        end_time=10.0,
+        production_rates={"gold": 5.0},
+        multiplier=1.0,
+        drain_rates={"gold": 1.0},
+        net_rates={"gold": 4.0},
+        tickspeed=2.0,
+    )
+    assert seg.drain_rates == {"gold": 1.0}
+    assert seg.net_rates == {"gold": 4.0}
+    assert seg.tickspeed == 2.0
+
+
+def test_segment_new_fields_defaults():
+    seg = Segment(
+        start_time=0.0, end_time=10.0,
+        production_rates={}, multiplier=1.0,
+    )
+    assert seg.drain_rates == {}
+    assert seg.net_rates == {}
+    assert seg.tickspeed == 1.0

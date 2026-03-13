@@ -34,6 +34,9 @@ class Segment:
     production_rates: dict[str, float]  # resource_id -> rate/sec
     multiplier: float  # from stacking groups
     events: list[str] = field(default_factory=list)  # what caused this segment
+    drain_rates: dict[str, float] = field(default_factory=dict)  # resource_id -> drain/sec
+    net_rates: dict[str, float] = field(default_factory=dict)  # resource_id -> net/sec
+    tickspeed: float = 1.0  # current tickspeed multiplier
 
 
 class PiecewiseEngine:

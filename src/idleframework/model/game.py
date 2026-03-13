@@ -12,6 +12,8 @@ from idleframework.model.nodes import (
     PrestigeLayer,
     Register,
     SacrificeNode,
+    SynergyNode,
+    TickspeedNode,
     Upgrade,
 )
 
@@ -38,6 +40,8 @@ class GameDefinition(BaseModel):
         self._validate_upgrade_targets()
         self._validate_stacking_groups()
         self._validate_formulas()
+        self._validate_tickspeed_singleton()
+        self._validate_state_modifier_properties()
         return self
 
     def _validate_unique_node_ids(self) -> None:
@@ -106,6 +110,13 @@ class GameDefinition(BaseModel):
                     raise ValueError(
                         f"Formula validation failed on node {node.id!r}: {e}"
                     ) from e
+            if isinstance(node, SynergyNode):
+                try:
+                    compile_formula(node.formula_expr)
+                except Exception as e:
+                    raise ValueError(
+                        f"Formula validation failed on node {node.id!r}: {e}"
+                    ) from e
 
         # Validate formula on state_modifier edges
         for edge in self.edges:
@@ -116,6 +127,31 @@ class GameDefinition(BaseModel):
                     raise ValueError(
                         f"Formula validation failed on edge {edge.id!r}: {e}"
                     ) from e
+
+    def _validate_tickspeed_singleton(self) -> None:
+        ts_count = sum(1 for n in self.nodes if isinstance(n, TickspeedNode))
+        if ts_count > 1:
+            raise ValueError(f"At most one tickspeed node allowed, found {ts_count}")
+
+    def _validate_state_modifier_properties(self) -> None:
+        node_map = {n.id: n for n in self.nodes}
+        for edge in self.edges:
+            if edge.edge_type == "state_modifier" and edge.target_property is not None:
+                target_node = node_map.get(edge.target)
+                if target_node is None:
+                    continue  # caught by _validate_edge_references
+                valid_fields = {
+                    name for name, info in type(target_node).model_fields.items()
+                    if info.annotation in (float, int, "float", "int")
+                    or str(info.annotation).startswith("float")
+                    or str(info.annotation).startswith("int")
+                    or "float" in str(info.annotation)
+                }
+                if edge.target_property not in valid_fields:
+                    raise ValueError(
+                        f"Edge {edge.id!r}: target_property {edge.target_property!r} "
+                        f"is not a valid numeric field on {type(target_node).__name__}"
+                    )
 
     def get_node(self, node_id: str) -> NodeUnion:
         """Get a node by ID. Raises KeyError if not found."""

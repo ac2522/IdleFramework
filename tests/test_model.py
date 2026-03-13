@@ -1027,3 +1027,57 @@ def test_game_state_layer_run_times_default():
 
     gs = GameState(node_states={})
     assert gs.layer_run_times == {}
+
+
+# --- Task 12: GameDefinition validation for new node types ---
+
+def test_game_validates_tickspeed_singleton():
+    """Only one TickspeedNode allowed per game."""
+    from pydantic import ValidationError
+    from idleframework.model.nodes import Resource
+    from idleframework.model.game import GameDefinition
+
+    nodes = [
+        Resource(id="r1", name="Gold"),
+        TickspeedNode(id="ts1"),
+        TickspeedNode(id="ts2"),
+    ]
+    with pytest.raises(ValidationError, match="tickspeed"):
+        GameDefinition(
+            schema_version="1.0", name="test",
+            nodes=nodes, edges=[], stacking_groups={},
+        )
+
+
+def test_game_validates_state_modifier_target_property():
+    """target_property must be a valid numeric field on target node."""
+    from pydantic import ValidationError
+    from idleframework.model.edges import Edge
+    from idleframework.model.nodes import Generator, Resource
+    from idleframework.model.game import GameDefinition
+
+    nodes = [Resource(id="r1", name="Gold"), Generator(id="g1", name="Gen", base_production=1, cost_base=1, cost_growth_rate=1.15)]
+    edges = [Edge(id="e1", source="r1", target="g1", edge_type="state_modifier", formula="2", target_property="nonexistent_field", modifier_mode="multiply")]
+    with pytest.raises(ValidationError, match="target_property"):
+        GameDefinition(
+            schema_version="1.0", name="test",
+            nodes=nodes, edges=edges, stacking_groups={},
+        )
+
+
+def test_game_validates_synergy_formula():
+    """SynergyNode formula_expr must compile."""
+    from pydantic import ValidationError
+    from idleframework.model.nodes import Generator, Resource
+    from idleframework.model.game import GameDefinition
+
+    nodes = [
+        Resource(id="r1", name="Gold"),
+        Generator(id="g1", name="Gen", base_production=1, cost_base=1, cost_growth_rate=1.15),
+        SynergyNode(id="syn1", sources=["g1"], formula_expr="invalid!!!", target="g1"),
+    ]
+    with pytest.raises(ValidationError, match="[Ff]ormula"):
+        GameDefinition(
+            schema_version="1.0", name="test",
+            nodes=nodes, edges=[], stacking_groups={},
+        )
