@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from idleframework.bigfloat import BigFloat
 from idleframework.engine.segments import PiecewiseEngine
 from idleframework.engine.solvers import bulk_purchase_cost
-from idleframework.model.nodes import Generator, Upgrade
+from idleframework.model.nodes import AutobuyerNode, Generator, TickspeedNode, Upgrade
 from idleframework.model.state import GameState
 
 if TYPE_CHECKING:
@@ -53,6 +53,10 @@ class GreedyOptimizer:
         self.game = game
         self.engine = PiecewiseEngine(game, state)
         self.steps: list[PurchaseStep] = []
+        self._autobuyer_targets: set[str] = set()
+        for node in self.game.nodes:
+            if isinstance(node, AutobuyerNode):
+                self._autobuyer_targets.add(node.target)
 
     def compute_generator_efficiency(self, gen_id: str) -> float:
         """Efficiency of buying 1 more of a generator.
@@ -95,6 +99,19 @@ class GreedyOptimizer:
         cost = node.cost
         if cost <= 0:
             return float("inf")
+
+        # Check if target is a TickspeedNode — affects ALL production
+        if node.target != "_all":
+            try:
+                target_node = self.game.get_node(node.target)
+                if isinstance(target_node, TickspeedNode):
+                    rates = self.engine.compute_production_rates()
+                    total = sum(rates.values())
+                    if node.upgrade_type == "multiplicative":
+                        return total * (node.magnitude - 1) / cost
+                    return 0.0
+            except KeyError:
+                pass
 
         if node.upgrade_type == "multiplicative":
             # production * (magnitude - 1) / cost
@@ -154,6 +171,8 @@ class GreedyOptimizer:
 
         for node in self.game.nodes:
             if isinstance(node, Generator):
+                if node.id in self._autobuyer_targets:
+                    continue
                 eff = self.compute_generator_efficiency(node.id)
                 if eff > best_eff:
                     best_eff = eff
@@ -277,6 +296,8 @@ class GreedyOptimizer:
 
         for node in self.game.nodes:
             if isinstance(node, Generator):
+                if node.id in self._autobuyer_targets:
+                    continue
                 ns = self.engine.state.get(node.id)
                 cost_bf = bulk_purchase_cost(
                     BigFloat(node.cost_base),

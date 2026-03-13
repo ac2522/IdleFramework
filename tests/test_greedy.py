@@ -284,3 +284,60 @@ class TestGreedyConstraints:
         steps = opt.run(target_time=100.0, max_steps=10)
 
         assert steps == []
+
+
+def test_greedy_tickspeed_upgrade_efficiency():
+    """Tickspeed upgrade should be valued based on total production impact."""
+    from idleframework.model.nodes import Resource, Generator, TickspeedNode, Upgrade
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=1000.0),
+            Generator(id="gen1", name="Miner", base_production=10.0, cost_base=100, cost_growth_rate=1.15),
+            TickspeedNode(id="ts1"),
+            Upgrade(id="ts_upg", name="Tick Boost", upgrade_type="multiplicative",
+                    magnitude=2.0, cost=500.0, target="ts1", stacking_group="tick"),
+        ],
+        edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
+        stacking_groups={"tick": "multiplicative"},
+    )
+    state = GameState.from_game(game)
+    state.get("gen1").owned = 5
+    opt = GreedyOptimizer(game, state)
+    eff = opt.compute_upgrade_efficiency("ts_upg")
+    assert eff > 0  # Should have positive efficiency
+
+
+def test_greedy_skips_autobuyer_targets():
+    """Greedy should not recommend purchasing nodes managed by autobuyers."""
+    from idleframework.model.nodes import Resource, Generator, AutobuyerNode
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=10000.0),
+            Generator(id="gen1", name="Auto-Miner", base_production=10.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(id="gen2", name="Manual-Logger", base_production=5.0, cost_base=10, cost_growth_rate=1.15),
+            AutobuyerNode(id="ab1", target="gen1", interval=1.0),
+        ],
+        edges=[
+            Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+            Edge(id="e2", source="gen2", target="gold", edge_type="production_target"),
+        ],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gen2").owned = 1
+    opt = GreedyOptimizer(game, state)
+    best = opt.find_best_purchase()
+    assert best is not None
+    assert best[0] == "gen2"  # Should skip gen1 (autobuyer-managed)
