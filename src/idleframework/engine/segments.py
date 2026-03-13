@@ -9,6 +9,7 @@ segment.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -17,7 +18,8 @@ from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
 from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
-from idleframework.model.nodes import DrainNode, Generator, PrestigeLayer, Register, Resource, TickspeedNode, Upgrade
+from idleframework.engine.state_edges import evaluate_state_edges, apply_property_modifications
+from idleframework.model.nodes import BuffNode, DrainNode, Generator, PrestigeLayer, Register, Resource, TickspeedNode, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -37,6 +39,13 @@ class Segment:
     drain_rates: dict[str, float] = field(default_factory=dict)  # resource_id -> drain/sec
     net_rates: dict[str, float] = field(default_factory=dict)  # resource_id -> net/sec
     tickspeed: float = 1.0  # current tickspeed multiplier
+
+
+@dataclass
+class BuffMultipliers:
+    """Resolved buff multipliers for production calculation."""
+    global_multiplier: float = 1.0
+    per_generator: dict[str, float] = field(default_factory=dict)
 
 
 class PiecewiseEngine:
@@ -143,6 +152,10 @@ class PiecewiseEngine:
         # Build per-generator multiplier from upgrades
         gen_multipliers = self._compute_generator_multipliers()
         tickspeed = self.compute_tickspeed()
+        buffs = self.evaluate_buffs()
+
+        # Evaluate state edges for property modifications
+        modified = evaluate_state_edges(self._game, self._state)
 
         for node in self._game.nodes:
             if not isinstance(node, Generator):
@@ -151,8 +164,16 @@ class PiecewiseEngine:
             if ns.owned <= 0 or not ns.active:
                 continue
 
+            base_prod = node.base_production
+            # Apply state edge modifications to base_production
+            if node.id in modified and "base_production" in modified[node.id]:
+                base_prod = apply_property_modifications(
+                    base_prod, modified[node.id]["base_production"]
+                )
+
             gen_mult = gen_multipliers.get(node.id, 1.0)
-            rate = node.base_production * ns.owned / node.cycle_time * gen_mult * tickspeed
+            buff_mult = buffs.global_multiplier * buffs.per_generator.get(node.id, 1.0)
+            rate = base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult
 
             # Find which resource(s) this generator produces to
             for edge in self._game.get_edges_from(node.id):
@@ -248,6 +269,43 @@ class PiecewiseEngine:
 
         mult = compute_final_multiplier(ts_groups) if ts_groups else 1.0
         return base * mult
+
+    def evaluate_buffs(self) -> BuffMultipliers:
+        """Compute expected-value buff multipliers.
+
+        Timed: EV = 1 + (mult-1) * (duration/(duration+cooldown))
+        Zero cooldown: EV = multiplier (always active)
+        Proc: EV = 1 + proc_chance * (mult-1)
+        """
+        result = BuffMultipliers()
+        per_gen: dict[str, float] = defaultdict(lambda: 1.0)
+
+        for node in self._game.nodes:
+            if not isinstance(node, BuffNode):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.active:
+                continue
+
+            if node.buff_type == "timed":
+                if node.cooldown == 0.0:
+                    ev = node.multiplier
+                else:
+                    d = node.duration or 0.0
+                    ev = 1.0 + (node.multiplier - 1.0) * (d / (d + node.cooldown))
+            elif node.buff_type == "proc":
+                pc = node.proc_chance or 0.0
+                ev = 1.0 + pc * (node.multiplier - 1.0)
+            else:
+                ev = 1.0
+
+            if node.target is None:
+                result.global_multiplier *= ev
+            else:
+                per_gen[node.target] *= ev
+
+        result.per_generator = dict(per_gen)
+        return result
 
     def compute_drain_rates(self) -> dict[str, float]:
         """Compute per-resource drain rates from active DrainNodes."""
