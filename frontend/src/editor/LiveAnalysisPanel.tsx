@@ -332,7 +332,6 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
       // Save game (overwrites previous draft since slugified name is stable)
       const { id: gameId } = await createGame(gameJson as unknown as Record<string, unknown>)
       draftGameIdRef.current = gameId
-      setLastGameId(gameId)
 
       // Discard if stale
       if (version !== versionRef.current) return
@@ -343,6 +342,7 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
       // Discard if stale
       if (version !== versionRef.current) return
 
+      setLastGameId(gameId)
       setResult(analysisResult)
 
       // Determine status from results
@@ -450,7 +450,7 @@ export default function LiveAnalysisPanel({ nodes, edges, gameName }: LiveAnalys
           )}
 
           <MiniCharts result={result} />
-          <CompareTagsSection gameId={lastGameId} nodes={nodes} />
+          <CompareTagsSection key={lastGameId ?? 'none'} gameId={lastGameId} nodes={nodes} />
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Node } from '@xyflow/react'
 import type { EditorNodeData } from './types.ts'
 import FormulaField from './FormulaField.tsx'
@@ -94,13 +94,14 @@ function TagsField({ label, tags, onChange, suggestions = [] }: {
   const [input, setInput] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(-1)
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const filtered = input.trim()
     ? suggestions.filter((s) => s.toLowerCase().startsWith(input.toLowerCase()))
     : []
 
   function addTag(tag: string) {
-    if (!tags.includes(tag)) {
+    if (!tags.some((t) => t.toLowerCase() === tag.toLowerCase())) {
       onChange([...tags, tag])
     }
     setInput('')
@@ -166,8 +167,8 @@ function TagsField({ label, tags, onChange, suggestions = [] }: {
           value={input}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => { if (input.trim()) setShowDropdown(true) }}
-          onBlur={() => { setTimeout(() => setShowDropdown(false), 150) }}
+          onFocus={() => { if (blurTimerRef.current) clearTimeout(blurTimerRef.current); if (input.trim()) setShowDropdown(true) }}
+          onBlur={() => { blurTimerRef.current = setTimeout(() => setShowDropdown(false), 150) }}
           placeholder="Type + Enter to add"
           className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
