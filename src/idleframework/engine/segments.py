@@ -710,6 +710,52 @@ class PiecewiseEngine:
         compiled = compile_formula(node.formula_expr)
         return float(evaluate_formula(compiled, kwargs))
 
+    def execute_prestige(self, prestige_id: str) -> float:
+        """Execute a prestige reset: compute gain, deposit currency, reset scopes."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
+        node = self._game.get_node(prestige_id)
+        if not isinstance(node, PrestigeLayer):
+            raise ValueError(f"{prestige_id!r} is not a PrestigeLayer")
+
+        variables = build_state_variables(self._game, self._state)
+        compiled = compile_formula(node.formula_expr)
+        gain = float(evaluate_formula(compiled, variables))
+
+        # Deposit into currency resource
+        if node.currency_id:
+            self._state.get(node.currency_id).current_value += gain
+
+        # Reset all lower layers first
+        for other in self._game.nodes:
+            if isinstance(other, PrestigeLayer) and other.layer_index < node.layer_index:
+                self._execute_reset(other.reset_scope, other.persistence_scope)
+                self._state.layer_run_times[other.id] = 0.0
+
+        # Reset this layer's scope
+        self._execute_reset(node.reset_scope, node.persistence_scope)
+        self._state.layer_run_times[prestige_id] = 0.0
+
+        return gain
+
+    def _execute_reset(self, reset_scope: list[str], persistence_scope: list[str]) -> None:
+        """Reset nodes in reset_scope except those in persistence_scope."""
+        persist = set(persistence_scope)
+        for node_id in reset_scope:
+            if node_id in persist:
+                continue
+            ns = self._state.get(node_id)
+            node = self._game.get_node(node_id)
+            if isinstance(node, Resource):
+                ns.current_value = node.initial_value
+            elif isinstance(node, Generator):
+                ns.owned = 0
+                ns.total_production = 0.0
+            elif isinstance(node, Upgrade):
+                ns.purchased = False
+            ns.last_fired = 0.0
+
     def evaluate_register(self, register_id: str, variables: dict[str, float]) -> float:
         """Evaluate a register node's formula with given variables."""
         from idleframework.dsl.compiler import compile_formula, evaluate_formula
