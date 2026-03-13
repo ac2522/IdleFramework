@@ -19,7 +19,7 @@ from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
 from idleframework.engine.state_edges import evaluate_state_edges, apply_property_modifications
-from idleframework.model.nodes import BuffNode, DrainNode, Generator, PrestigeLayer, Register, Resource, TickspeedNode, Upgrade
+from idleframework.model.nodes import BuffNode, DrainNode, Generator, PrestigeLayer, Register, Resource, SynergyNode, TickspeedNode, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -153,6 +153,7 @@ class PiecewiseEngine:
         gen_multipliers = self._compute_generator_multipliers()
         tickspeed = self.compute_tickspeed()
         buffs = self.evaluate_buffs()
+        synergies = self.compute_synergy_multipliers()
 
         # Evaluate state edges for property modifications
         modified = evaluate_state_edges(self._game, self._state)
@@ -173,7 +174,8 @@ class PiecewiseEngine:
 
             gen_mult = gen_multipliers.get(node.id, 1.0)
             buff_mult = buffs.global_multiplier * buffs.per_generator.get(node.id, 1.0)
-            rate = base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult
+            syn_mult = synergies.get(node.id, 1.0)
+            rate = base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult * syn_mult
 
             # Find which resource(s) this generator produces to
             for edge in self._game.get_edges_from(node.id):
@@ -306,6 +308,31 @@ class PiecewiseEngine:
 
         result.per_generator = dict(per_gen)
         return result
+
+    def compute_synergy_multipliers(self) -> dict[str, float]:
+        """Compute per-generator multipliers from SynergyNodes."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
+        synergies: dict[str, float] = {}
+        variables = build_state_variables(self._game, self._state)
+
+        for node in self._game.nodes:
+            if not isinstance(node, SynergyNode):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.active:
+                continue
+            compiled = compile_formula(node.formula_expr)
+            bonus = float(evaluate_formula(compiled, variables))
+            # Apply as additive bonus: target_mult = 1 + bonus
+            if node.target in synergies:
+                synergies[node.target] += bonus
+            else:
+                synergies[node.target] = bonus
+
+        # Convert to multipliers: 1 + total_bonus
+        return {k: 1.0 + v for k, v in synergies.items()}
 
     def compute_drain_rates(self) -> dict[str, float]:
         """Compute per-resource drain rates from active DrainNodes."""
@@ -791,6 +818,16 @@ class PiecewiseEngine:
             ns.current_value += rate * dt
             if rate > 0:
                 ns.total_production += rate * dt
+            # Clamp at 0
+            if ns.current_value < 0:
+                ns.current_value = 0.0
+
+        # Clamp to capacity if set
+        for node in self._game.nodes:
+            if isinstance(node, Resource) and node.capacity is not None:
+                ns = self._state.get(node.id)
+                if ns.current_value > node.capacity:
+                    ns.current_value = node.capacity
 
         # Track lifetime earnings (only positive rates)
         for resource_id, rate in rates.items():
@@ -801,12 +838,6 @@ class PiecewiseEngine:
                 self._state.lifetime_earnings[resource_id] += earned
             else:
                 self._state.lifetime_earnings[resource_id] = earned
-
-        # Clamp resource values at 0
-        for resource_id, rate in rates.items():
-            ns = self._state.get(resource_id)
-            if ns.current_value < 0:
-                ns.current_value = 0.0
 
     def _ensure_can_afford(self, node_id: str) -> None:
         """Nudge balance up if floating-point drift left us barely short."""
