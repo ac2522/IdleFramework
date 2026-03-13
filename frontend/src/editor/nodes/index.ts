@@ -15,6 +15,11 @@ import ChoiceGroupNode from './ChoiceGroupNode'
 import RegisterNode from './RegisterNode'
 import GateNode from './GateNode'
 import QueueNode from './QueueNode'
+import TickspeedNode from './TickspeedNode'
+import AutobuyerNode from './AutobuyerNode'
+import DrainNode from './DrainNode'
+import BuffNode from './BuffNode'
+import SynergyNode from './SynergyNode'
 
 export const editorNodeTypes: NodeTypes = {
   resource: ResourceNode,
@@ -33,4 +38,9 @@ export const editorNodeTypes: NodeTypes = {
   register: RegisterNode,
   gate: GateNode,
   queue: QueueNode,
+  tickspeed: TickspeedNode,
+  autobuyer: AutobuyerNode,
+  drain: DrainNode,
+  buff: BuffNode,
+  synergy: SynergyNode,
 }

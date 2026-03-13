@@ -148,6 +148,49 @@ export interface QueueNodeData extends NodeDataBase {
   capacity: number | null
 }
 
+export interface TickspeedNodeData extends NodeDataBase {
+  nodeType: 'tickspeed'
+  name: string
+  base_tickspeed: number
+}
+
+export interface AutobuyerNodeData extends NodeDataBase {
+  nodeType: 'autobuyer'
+  name: string
+  target: string
+  interval: number
+  priority: number
+  condition: string
+  bulk_amount: '1' | '10' | 'max'
+  enabled: boolean
+}
+
+export interface DrainNodeData extends NodeDataBase {
+  nodeType: 'drain'
+  name: string
+  rate: number
+  condition: string
+}
+
+export interface BuffNodeData extends NodeDataBase {
+  nodeType: 'buff'
+  name: string
+  buff_type: 'timed' | 'proc'
+  duration: number
+  proc_chance: number
+  multiplier: number
+  target: string
+  cooldown: number
+}
+
+export interface SynergyNodeData extends NodeDataBase {
+  nodeType: 'synergy'
+  name: string
+  sources: string[]
+  formula_expr: string
+  target: string
+}
+
 export type EditorNodeData =
   | ResourceNodeData
   | GeneratorNodeData
@@ -165,9 +208,14 @@ export type EditorNodeData =
   | RegisterNodeData
   | GateNodeData
   | QueueNodeData
+  | TickspeedNodeData
+  | AutobuyerNodeData
+  | DrainNodeData
+  | BuffNodeData
+  | SynergyNodeData
 
 export type EditorNode = Node<EditorNodeData>
-export type EditorEdge = Edge<{ edgeType: string; rate?: number; formula?: string; condition?: string }>
+export type EditorEdge = Edge<{ edgeType: string; rate?: number; formula?: string; condition?: string; target_property?: string; modifier_mode?: 'set' | 'add' | 'multiply' }>
 
 // -- Edge type constants --
 
@@ -194,6 +242,11 @@ export const NODE_COLORS: Record<string, { bg: string; border: string; text: str
   register:         { bg: 'bg-slate-50 dark:bg-slate-900', border: 'border-slate-400',  text: 'text-slate-800 dark:text-slate-200' },
   queue:            { bg: 'bg-slate-50 dark:bg-slate-900', border: 'border-slate-600',  text: 'text-slate-800 dark:text-slate-200' },
   converter:        { bg: 'bg-amber-50 dark:bg-amber-950', border: 'border-amber-400',  text: 'text-amber-800 dark:text-amber-200' },
+  tickspeed:        { bg: 'bg-cyan-50 dark:bg-cyan-950',  border: 'border-cyan-400',   text: 'text-cyan-800 dark:text-cyan-200' },
+  autobuyer:        { bg: 'bg-orange-50 dark:bg-orange-950', border: 'border-orange-500', text: 'text-orange-800 dark:text-orange-200' },
+  drain:            { bg: 'bg-red-50 dark:bg-red-950',    border: 'border-red-400',    text: 'text-red-800 dark:text-red-200' },
+  buff:             { bg: 'bg-yellow-50 dark:bg-yellow-950', border: 'border-yellow-500', text: 'text-yellow-800 dark:text-yellow-200' },
+  synergy:          { bg: 'bg-violet-50 dark:bg-violet-950', border: 'border-violet-400', text: 'text-violet-800 dark:text-violet-200' },
 }
 
 // -- Default data factories for each node type --
@@ -238,6 +291,16 @@ export function defaultNodeData(nodeType: string, id: string): EditorNodeData {
       return { ...base, nodeType: 'gate', name: id, mode: 'deterministic', weights: null, probabilities: null }
     case 'queue':
       return { ...base, nodeType: 'queue', name: id, delay: 1, capacity: null }
+    case 'tickspeed':
+      return { ...base, nodeType: 'tickspeed', name: id, base_tickspeed: 1 }
+    case 'autobuyer':
+      return { ...base, nodeType: 'autobuyer', name: id, target: '', interval: 1, priority: 0, condition: '', bulk_amount: '1', enabled: true }
+    case 'drain':
+      return { ...base, nodeType: 'drain', name: id, rate: 1, condition: '' }
+    case 'buff':
+      return { ...base, nodeType: 'buff', name: id, buff_type: 'timed', duration: 10, proc_chance: 0, multiplier: 2, target: '', cooldown: 0 }
+    case 'synergy':
+      return { ...base, nodeType: 'synergy', name: id, sources: [], formula_expr: 'sqrt(a * b)', target: '' }
     default:
       return { ...base, nodeType: 'resource', name: id, initial_value: 0 }
   }

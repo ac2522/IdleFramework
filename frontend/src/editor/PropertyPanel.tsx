@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import type { Node } from '@xyflow/react'
+import type { Node, Edge } from '@xyflow/react'
 import type { EditorNodeData } from './types.ts'
 import FormulaField from './FormulaField.tsx'
 
@@ -198,7 +198,13 @@ function TagsField({ label, tags, onChange, suggestions = [] }: {
 function TypeFields({ data, update }: { data: EditorNodeData; update: (patch: Partial<EditorNodeData>) => void }) {
   switch (data.nodeType) {
     case 'resource':
-      return <NumberField label="Initial Value" value={data.initial_value} onChange={(v) => update({ initial_value: v } as Partial<EditorNodeData>)} />
+      return (
+        <>
+          <NumberField label="Initial Value" value={data.initial_value} onChange={(v) => update({ initial_value: v } as Partial<EditorNodeData>)} />
+          <NumberField label="Capacity" value={(data as Record<string, unknown>).capacity as number ?? 0} onChange={(v) => update({ capacity: v || null } as Partial<EditorNodeData>)} />
+          <SelectField label="Overflow Behavior" value={((data as Record<string, unknown>).overflow_behavior as string) ?? 'clamp'} options={['clamp', 'waste']} onChange={(v) => update({ overflow_behavior: v } as Partial<EditorNodeData>)} />
+        </>
+      )
 
     case 'generator':
       return (
@@ -237,6 +243,8 @@ function TypeFields({ data, update }: { data: EditorNodeData; update: (patch: Pa
           <FormulaField label="Formula" value={data.formula_expr} onChange={(v) => update({ formula_expr: v } as Partial<EditorNodeData>)} />
           <NumberField label="Layer Index" value={data.layer_index} onChange={(v) => update({ layer_index: v } as Partial<EditorNodeData>)} />
           <SelectField label="Bonus Type" value={data.bonus_type} options={['multiplicative', 'additive', 'percentage']} onChange={(v) => update({ bonus_type: v } as Partial<EditorNodeData>)} />
+          <Field label="Currency ID" value={((data as Record<string, unknown>).currency_id as string) ?? ''} onChange={(v) => update({ currency_id: v } as Partial<EditorNodeData>)} />
+          <Field label="Parent Layer" value={((data as Record<string, unknown>).parent_layer as string) ?? ''} onChange={(v) => update({ parent_layer: v } as Partial<EditorNodeData>)} />
         </>
       )
 
@@ -265,7 +273,13 @@ function TypeFields({ data, update }: { data: EditorNodeData; update: (patch: Pa
       )
 
     case 'converter':
-      return <NumberField label="Rate" value={data.rate} onChange={(v) => update({ rate: v } as Partial<EditorNodeData>)} />
+      return (
+        <>
+          <NumberField label="Rate" value={data.rate} onChange={(v) => update({ rate: v } as Partial<EditorNodeData>)} />
+          <SelectField label="Recipe Type" value={((data as Record<string, unknown>).recipe_type as string) ?? 'fixed'} options={['fixed', 'scaling']} onChange={(v) => update({ recipe_type: v } as Partial<EditorNodeData>)} />
+          <NumberField label="Conversion Limit" value={((data as Record<string, unknown>).conversion_limit as number) ?? 0} onChange={(v) => update({ conversion_limit: v || null } as Partial<EditorNodeData>)} />
+        </>
+      )
 
     case 'probability':
       return (
@@ -310,9 +324,86 @@ function TypeFields({ data, update }: { data: EditorNodeData; update: (patch: Pa
         </>
       )
 
+    case 'tickspeed':
+      return <NumberField label="Base Tickspeed" value={data.base_tickspeed} onChange={(v) => update({ base_tickspeed: v } as Partial<EditorNodeData>)} step={0.1} />
+
+    case 'autobuyer':
+      return (
+        <>
+          <Field label="Target" value={data.target} onChange={(v) => update({ target: v } as Partial<EditorNodeData>)} />
+          <NumberField label="Interval (s)" value={data.interval} onChange={(v) => update({ interval: v } as Partial<EditorNodeData>)} step={0.1} />
+          <NumberField label="Priority" value={data.priority} onChange={(v) => update({ priority: v } as Partial<EditorNodeData>)} />
+          <Field label="Condition" value={data.condition} onChange={(v) => update({ condition: v } as Partial<EditorNodeData>)} />
+          <SelectField label="Bulk Amount" value={data.bulk_amount} options={['1', '10', 'max']} onChange={(v) => update({ bulk_amount: v } as Partial<EditorNodeData>)} />
+          <CheckboxField label="Enabled" checked={data.enabled} onChange={(v) => update({ enabled: v } as Partial<EditorNodeData>)} />
+        </>
+      )
+
+    case 'drain':
+      return (
+        <>
+          <NumberField label="Rate" value={data.rate} onChange={(v) => update({ rate: v } as Partial<EditorNodeData>)} step={0.1} />
+          <Field label="Condition" value={data.condition} onChange={(v) => update({ condition: v } as Partial<EditorNodeData>)} />
+        </>
+      )
+
+    case 'buff':
+      return (
+        <>
+          <SelectField label="Buff Type" value={data.buff_type} options={['timed', 'proc']} onChange={(v) => update({ buff_type: v } as Partial<EditorNodeData>)} />
+          <NumberField label="Duration (s)" value={data.duration} onChange={(v) => update({ duration: v } as Partial<EditorNodeData>)} />
+          <NumberField label="Proc Chance" value={data.proc_chance} onChange={(v) => update({ proc_chance: v } as Partial<EditorNodeData>)} step={0.01} />
+          <NumberField label="Multiplier" value={data.multiplier} onChange={(v) => update({ multiplier: v } as Partial<EditorNodeData>)} />
+          <Field label="Target" value={data.target} onChange={(v) => update({ target: v } as Partial<EditorNodeData>)} />
+          <NumberField label="Cooldown (s)" value={data.cooldown} onChange={(v) => update({ cooldown: v } as Partial<EditorNodeData>)} />
+        </>
+      )
+
+    case 'synergy':
+      return (
+        <>
+          <FormulaField label="Formula" value={data.formula_expr} onChange={(v) => update({ formula_expr: v } as Partial<EditorNodeData>)} />
+          <Field label="Target" value={data.target} onChange={(v) => update({ target: v } as Partial<EditorNodeData>)} />
+        </>
+      )
+
     default:
       return null
   }
+}
+
+// --- Main PropertyPanel ---
+
+// --- Edge property fields ---
+
+function EdgeFields({ edge, onUpdate }: { edge: Edge; onUpdate: (edgeId: string, data: Record<string, unknown>) => void }) {
+  const edgeData = (edge.data ?? {}) as Record<string, unknown>
+  const edgeType = (edgeData.edgeType as string) ?? 'resource_flow'
+
+  function updateEdge(patch: Record<string, unknown>) {
+    onUpdate(edge.id, { ...edgeData, ...patch })
+  }
+
+  return (
+    <>
+      <Field label="Edge Type" value={edgeType} readOnly />
+      {edgeData.rate != null && (
+        <NumberField label="Rate" value={edgeData.rate as number} onChange={(v) => updateEdge({ rate: v })} />
+      )}
+      {edgeData.formula != null && (
+        <Field label="Formula" value={edgeData.formula as string} onChange={(v) => updateEdge({ formula: v })} />
+      )}
+      {edgeData.condition != null && (
+        <Field label="Condition" value={edgeData.condition as string} onChange={(v) => updateEdge({ condition: v })} />
+      )}
+      {edgeType === 'state_modifier' && (
+        <>
+          <Field label="Target Property" value={(edgeData.target_property as string) ?? ''} onChange={(v) => updateEdge({ target_property: v })} />
+          <SelectField label="Modifier Mode" value={(edgeData.modifier_mode as string) ?? 'multiply'} options={['set', 'add', 'multiply']} onChange={(v) => updateEdge({ modifier_mode: v })} />
+        </>
+      )}
+    </>
+  )
 }
 
 // --- Main PropertyPanel ---
@@ -321,13 +412,31 @@ interface PropertyPanelProps {
   selectedNode: Node<EditorNodeData> | null
   onUpdateNode: (nodeId: string, data: Partial<EditorNodeData>) => void
   allNodes: Node<EditorNodeData>[]
+  selectedEdge?: Edge | null
+  onUpdateEdge?: (edgeId: string, data: Record<string, unknown>) => void
 }
 
-export default function PropertyPanel({ selectedNode, onUpdateNode, allNodes }: PropertyPanelProps) {
+export default function PropertyPanel({ selectedNode, onUpdateNode, allNodes, selectedEdge, onUpdateEdge }: PropertyPanelProps) {
+  // Edge selected takes priority when no node is selected
+  if (!selectedNode && selectedEdge && onUpdateEdge) {
+    return (
+      <div className="p-4 overflow-y-auto h-full">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+          Edge Properties
+        </h3>
+        <Field label="ID" value={selectedEdge.id} readOnly />
+        <Field label="Source" value={selectedEdge.source} readOnly />
+        <Field label="Target" value={selectedEdge.target} readOnly />
+        <hr className="my-3 border-gray-200 dark:border-gray-700" />
+        <EdgeFields edge={selectedEdge} onUpdate={onUpdateEdge} />
+      </div>
+    )
+  }
+
   if (!selectedNode) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500 px-4 text-center">
-        Select a node to edit its properties
+        Select a node or edge to edit its properties
       </div>
     )
   }
