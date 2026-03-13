@@ -147,6 +147,7 @@ function EditorCanvas() {
             <PropertyPanel
               selectedNode={selectedNode as Node<EditorNodeData> | null}
               onUpdateNode={onUpdateNode}
+              allNodes={nodes as unknown as Node<EditorNodeData>[]}
             />
           </div>
           <div className="border-t border-gray-200 dark:border-gray-700 flex-1 overflow-y-auto">

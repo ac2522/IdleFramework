@@ -85,22 +85,55 @@ function CheckboxField({ label, checked, onChange }: {
   )
 }
 
-function TagsField({ label, tags, onChange }: {
+function TagsField({ label, tags, onChange, suggestions = [] }: {
   label: string
   tags: string[]
   onChange: (tags: string[]) => void
+  suggestions?: string[]
 }) {
   const [input, setInput] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [highlightIndex, setHighlightIndex] = useState(-1)
+
+  const filtered = input.trim()
+    ? suggestions.filter((s) => s.toLowerCase().startsWith(input.toLowerCase()))
+    : []
+
+  function addTag(tag: string) {
+    if (!tags.includes(tag)) {
+      onChange([...tags, tag])
+    }
+    setInput('')
+    setShowDropdown(false)
+    setHighlightIndex(-1)
+  }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' && input.trim()) {
+    if (e.key === 'ArrowDown' && showDropdown && filtered.length > 0) {
       e.preventDefault()
-      const tag = input.trim()
-      if (!tags.includes(tag)) {
-        onChange([...tags, tag])
+      setHighlightIndex((prev) => (prev + 1) % filtered.length)
+    } else if (e.key === 'ArrowUp' && showDropdown && filtered.length > 0) {
+      e.preventDefault()
+      setHighlightIndex((prev) => (prev <= 0 ? filtered.length - 1 : prev - 1))
+    } else if (e.key === 'Enter' && input.trim()) {
+      e.preventDefault()
+      if (highlightIndex >= 0 && highlightIndex < filtered.length) {
+        addTag(filtered[highlightIndex])
+      } else if (filtered.length > 0) {
+        addTag(filtered[0])
+      } else {
+        addTag(input.trim())
       }
-      setInput('')
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+      setHighlightIndex(-1)
     }
+  }
+
+  function handleInputChange(value: string) {
+    setInput(value)
+    setShowDropdown(value.trim().length > 0)
+    setHighlightIndex(-1)
   }
 
   function removeTag(tag: string) {
@@ -127,14 +160,34 @@ function TagsField({ label, tags, onChange }: {
           </span>
         ))}
       </div>
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Type + Enter to add"
-        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => { if (input.trim()) setShowDropdown(true) }}
+          onBlur={() => { setTimeout(() => setShowDropdown(false), 150) }}
+          placeholder="Type + Enter to add"
+          className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+        {showDropdown && filtered.length > 0 && (
+          <ul className="absolute z-10 mt-1 w-full rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 shadow-lg max-h-32 overflow-y-auto">
+            {filtered.map((suggestion, idx) => (
+              <li key={suggestion}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => addTag(suggestion)}
+                  className={`w-full px-2 py-1.5 text-left text-sm text-gray-900 dark:text-gray-100 ${idx === highlightIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-blue-50 dark:hover:bg-blue-900/30'}`}
+                >
+                  {suggestion}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
@@ -266,9 +319,10 @@ function TypeFields({ data, update }: { data: EditorNodeData; update: (patch: Pa
 interface PropertyPanelProps {
   selectedNode: Node<EditorNodeData> | null
   onUpdateNode: (nodeId: string, data: Partial<EditorNodeData>) => void
+  allNodes: Node<EditorNodeData>[]
 }
 
-export default function PropertyPanel({ selectedNode, onUpdateNode }: PropertyPanelProps) {
+export default function PropertyPanel({ selectedNode, onUpdateNode, allNodes }: PropertyPanelProps) {
   if (!selectedNode) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500 px-4 text-center">
@@ -279,6 +333,10 @@ export default function PropertyPanel({ selectedNode, onUpdateNode }: PropertyPa
 
   const data = selectedNode.data
   const nodeId = selectedNode.id
+
+  const allTags = Array.from(
+    new Set(allNodes.flatMap((n) => (n.data as EditorNodeData).tags ?? []))
+  ).filter((t) => !data.tags.includes(t))
 
   function update(patch: Partial<EditorNodeData>) {
     onUpdateNode(nodeId, patch)
@@ -292,7 +350,7 @@ export default function PropertyPanel({ selectedNode, onUpdateNode }: PropertyPa
 
       <Field label="ID" value={nodeId} readOnly />
       <Field label="Name" value={data.name} onChange={(v) => update({ name: v } as Partial<EditorNodeData>)} />
-      <TagsField label="Tags" tags={data.tags} onChange={(tags) => update({ tags } as Partial<EditorNodeData>)} />
+      <TagsField label="Tags" tags={data.tags} onChange={(tags) => update({ tags } as Partial<EditorNodeData>)} suggestions={allTags} />
 
       <hr className="my-3 border-gray-200 dark:border-gray-700" />
 
