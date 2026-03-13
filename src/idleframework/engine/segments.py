@@ -19,7 +19,7 @@ from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
 from idleframework.engine.state_edges import evaluate_state_edges, apply_property_modifications
-from idleframework.model.nodes import BuffNode, DrainNode, Generator, PrestigeLayer, Register, Resource, SynergyNode, TickspeedNode, Upgrade
+from idleframework.model.nodes import AutobuyerNode, BuffNode, DrainNode, Generator, PrestigeLayer, Register, Resource, SynergyNode, TickspeedNode, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -91,6 +91,13 @@ class PiecewiseEngine:
         for node in self._game.nodes:
             if isinstance(node, DrainNode):
                 self._drains[node.id] = node
+
+        self._autobuyers: dict[str, AutobuyerNode] = {}
+        self._autobuyer_targets: set[str] = set()
+        for node in self._game.nodes:
+            if isinstance(node, AutobuyerNode):
+                self._autobuyers[node.id] = node
+                self._autobuyer_targets.add(node.target)
 
     # -- Properties ----------------------------------------------------------
 
@@ -374,6 +381,81 @@ class PiecewiseEngine:
                 best = (res_id, time_to_zero)
         return best
 
+    # -- Autobuyer support ---------------------------------------------------
+
+    def _next_autobuyer_time(self) -> tuple[str, float] | None:
+        """Find the earliest autobuyer fire time."""
+        best: tuple[str, float] | None = None
+        for ab_id, ab in self._autobuyers.items():
+            ns = self._state.get(ab_id)
+            if not ns.active or not ab.enabled:
+                continue
+            next_fire = ns.last_fired + ab.interval
+            if next_fire <= self._time:
+                next_fire = self._time  # Fire immediately
+            if best is None or next_fire < best[1]:
+                best = (ab_id, next_fire)
+        return best
+
+    def _execute_autobuyer(self, autobuyer_id: str) -> None:
+        """Execute an autobuyer fire event."""
+        ab = self._autobuyers[autobuyer_id]
+        ns = self._state.get(autobuyer_id)
+
+        # Evaluate condition if set
+        if ab.condition is not None:
+            from idleframework.dsl.compiler import compile_formula, evaluate_formula
+            from idleframework.engine.variables import build_state_variables
+            variables = build_state_variables(self._game, self._state)
+            compiled = compile_formula(ab.condition)
+            if not float(evaluate_formula(compiled, variables)):
+                ns.last_fired = self._time
+                return
+
+        # Resolve bulk amount
+        amount = 1
+        if ab.bulk_amount == "10":
+            amount = 10
+        elif ab.bulk_amount == "max":
+            amount = self._compute_max_affordable(ab.target)
+
+        if amount > 0:
+            try:
+                self.purchase(ab.target, amount)
+            except ValueError:
+                pass  # Can't afford — skip
+
+        ns.last_fired = self._time
+
+    def _compute_max_affordable(self, node_id: str) -> int:
+        """Compute maximum affordable count for a node."""
+        node = self._game.get_node(node_id)
+        if not isinstance(node, Generator):
+            return 1  # Upgrades are 0 or 1
+
+        currency_id = self._get_currency_resource_id_for(node_id)
+        if not currency_id:
+            return 0
+        balance = self._state.get(currency_id).current_value
+        ns = self._state.get(node_id)
+
+        count = 0
+        total_cost = 0.0
+        while True:
+            cost = float(bulk_purchase_cost(
+                BigFloat(node.cost_base),
+                BigFloat(node.cost_growth_rate),
+                ns.owned + count,
+                1,
+            ))
+            if total_cost + cost > balance:
+                break
+            total_cost += cost
+            count += 1
+            if count >= 1000:  # Safety limit
+                break
+        return count
+
     # -- Next purchase -------------------------------------------------------
 
     def find_next_purchase(self) -> tuple[str, float] | None:
@@ -398,6 +480,8 @@ class PiecewiseEngine:
 
         for node in self._game.nodes:
             if isinstance(node, Generator):
+                if node.id in self._autobuyer_targets:
+                    continue  # Skip autobuyer-managed nodes
                 ns = self._state.get(node.id)
                 cost_bf = bulk_purchase_cost(
                     BigFloat(node.cost_base),
@@ -722,16 +806,42 @@ class PiecewiseEngine:
             gross_rates, net_rates = self._compute_net_rates()
             rates = net_rates  # Use net rates for accumulation
 
-            # Find next purchase
+            # Find next events
             next_purchase = self.find_next_purchase()
+            next_ab = self._next_autobuyer_time()
+
+            # Determine event times
+            purchase_time = None
+            ab_time = None
+            node_id = None
+            ab_id = None
 
             if next_purchase is not None:
                 node_id, time_needed = next_purchase
                 purchase_time = self._time + time_needed
-            else:
-                purchase_time = None
 
-            if purchase_time is not None and purchase_time < target_time - 1e-12:
+            if next_ab is not None:
+                ab_id, ab_time = next_ab
+
+            # Check if autobuyer fires before purchase and before target
+            ab_fires_first = False
+            if ab_time is not None and ab_time < target_time - 1e-12:
+                if purchase_time is None or ab_time < purchase_time:
+                    ab_fires_first = True
+
+            if ab_fires_first:
+                # Advance to autobuyer fire time
+                dt = ab_time - self._time
+                if dt < 0:
+                    dt = 0.0
+                if dt > 0:
+                    seg = self._create_segment(rates, dt, [f"autobuyer:{ab_id}"])
+                    new_segments.append(seg)
+                    self._accumulate(rates, dt)
+                    self._time = ab_time
+                self._execute_autobuyer(ab_id)
+
+            elif purchase_time is not None and purchase_time < target_time - 1e-12:
                 # Advance to purchase time
                 dt = purchase_time - self._time
                 if dt < 0:
@@ -785,7 +895,7 @@ class PiecewiseEngine:
                         break
 
             else:
-                # No purchase before target_time -- advance to target
+                # No purchase or autobuyer before target_time -- advance to target
                 dt = target_time - self._time
                 seg = self._create_segment(rates, dt, [])
                 new_segments.append(seg)
