@@ -17,7 +17,7 @@ from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
 from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
-from idleframework.model.nodes import Generator, PrestigeLayer, Register, Resource, TickspeedNode, Upgrade
+from idleframework.model.nodes import DrainNode, Generator, PrestigeLayer, Register, Resource, TickspeedNode, Upgrade
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -77,6 +77,11 @@ class PiecewiseEngine:
             if isinstance(node, TickspeedNode):
                 self._tickspeed_node = node
                 break
+
+        self._drains: dict[str, DrainNode] = {}
+        for node in self._game.nodes:
+            if isinstance(node, DrainNode):
+                self._drains[node.id] = node
 
     # -- Properties ----------------------------------------------------------
 
@@ -244,6 +249,46 @@ class PiecewiseEngine:
         mult = compute_final_multiplier(ts_groups) if ts_groups else 1.0
         return base * mult
 
+    def compute_drain_rates(self) -> dict[str, float]:
+        """Compute per-resource drain rates from active DrainNodes."""
+        drains: dict[str, float] = {}
+        for drain in self._drains.values():
+            ns = self._state.get(drain.id)
+            if not ns.active:
+                continue
+            # Find target resource via consumption edge
+            for edge in self._game.get_edges_from(drain.id):
+                if edge.edge_type == "consumption":
+                    drains[edge.target] = drains.get(edge.target, 0.0) + drain.rate
+        return drains
+
+    def compute_gross_rates(self) -> dict[str, float]:
+        """Alias for compute_production_rates (gross, before drains)."""
+        return self.compute_production_rates()
+
+    def _compute_net_rates(self) -> tuple[dict[str, float], dict[str, float]]:
+        """Compute gross and net rates. Returns (gross_rates, net_rates)."""
+        gross = self.compute_production_rates()
+        drains = self.compute_drain_rates()
+        net = {}
+        for res_id in set(list(gross.keys()) + list(drains.keys())):
+            net[res_id] = gross.get(res_id, 0.0) - drains.get(res_id, 0.0)
+        return gross, net
+
+    def _find_next_zero_crossing(self, net_rates: dict[str, float]) -> tuple[str, float] | None:
+        """Find earliest resource depletion from negative net rate."""
+        best: tuple[str, float] | None = None
+        for res_id, rate in net_rates.items():
+            if rate >= 0:
+                continue
+            balance = self._state.get(res_id).current_value
+            if balance <= 0:
+                continue
+            time_to_zero = balance / abs(rate)
+            if best is None or time_to_zero < best[1]:
+                best = (res_id, time_to_zero)
+        return best
+
     # -- Next purchase -------------------------------------------------------
 
     def find_next_purchase(self) -> tuple[str, float] | None:
@@ -255,7 +300,8 @@ class PiecewiseEngine:
 
         Returns (node_id, time_from_now) or None if nothing is purchasable.
         """
-        rates = self.compute_production_rates()
+        _, net_rates = self._compute_net_rates()
+        rates = net_rates
 
         if not rates or all(r <= 0 for r in rates.values()):
             return None
@@ -588,7 +634,8 @@ class PiecewiseEngine:
             # Apply free purchases at current time
             self.apply_free_purchases()
 
-            rates = self.compute_production_rates()
+            gross_rates, net_rates = self._compute_net_rates()
+            rates = net_rates  # Use net rates for accumulation
 
             # Find next purchase
             next_purchase = self.find_next_purchase()
@@ -640,7 +687,7 @@ class PiecewiseEngine:
                         break
 
                     # Check for near-simultaneous purchases
-                    rates = self.compute_production_rates()
+                    _, rates = self._compute_net_rates()
                     next_purchase = self.find_next_purchase()
                     if next_purchase is None:
                         break
@@ -684,15 +731,24 @@ class PiecewiseEngine:
         for resource_id, rate in rates.items():
             ns = self._state.get(resource_id)
             ns.current_value += rate * dt
-            ns.total_production += rate * dt
+            if rate > 0:
+                ns.total_production += rate * dt
 
-        # Track lifetime earnings
+        # Track lifetime earnings (only positive rates)
         for resource_id, rate in rates.items():
+            if rate <= 0:
+                continue
             earned = rate * dt
             if resource_id in self._state.lifetime_earnings:
                 self._state.lifetime_earnings[resource_id] += earned
             else:
                 self._state.lifetime_earnings[resource_id] = earned
+
+        # Clamp resource values at 0
+        for resource_id, rate in rates.items():
+            ns = self._state.get(resource_id)
+            if ns.current_value < 0:
+                ns.current_value = 0.0
 
     def _ensure_can_afford(self, node_id: str) -> None:
         """Nudge balance up if floating-point drift left us barely short."""
