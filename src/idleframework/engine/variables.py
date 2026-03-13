@@ -42,8 +42,13 @@ def build_state_variables(game: GameDefinition, state: GameState) -> dict[str, f
         if isinstance(node, Resource):
             variables[f"balance_{sid}"] = ns.current_value
 
+    total_lifetime = 0.0
     for res_id, amount in state.lifetime_earnings.items():
         sid = sanitize_var_name(res_id)
         variables[f"lifetime_{sid}"] = amount
+        total_lifetime += amount
+
+    # Aggregate alias used by AdCap-style formulas (e.g. "lifetime_earnings")
+    variables["lifetime_earnings"] = total_lifetime
 
     return variables

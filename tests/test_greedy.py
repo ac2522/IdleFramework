@@ -313,6 +313,59 @@ def test_greedy_tickspeed_upgrade_efficiency():
     assert eff > 0  # Should have positive efficiency
 
 
+def test_greedy_prestige_candidate():
+    """Prestige should appear as a candidate when gain > 0."""
+    from idleframework.model.nodes import Resource, Generator, PrestigeLayer
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=0.0),
+            Resource(id="pp", name="PP"),
+            Generator(id="gen1", name="G", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            PrestigeLayer(id="p1", formula_expr="floor(sqrt(lifetime_gold))",
+                         layer_index=1, reset_scope=["gen1", "gold"],
+                         currency_id="pp"),
+        ],
+        edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gen1").owned = 1
+    state.lifetime_earnings["gold"] = 10000.0
+    opt = GreedyOptimizer(game, state)
+    candidates = opt.get_candidates()
+    prestige_candidates = [c for c in candidates if c.get("type") == "prestige"]
+    assert len(prestige_candidates) > 0
+
+
+def test_approximation_level_exact():
+    from idleframework.model.nodes import Resource, Generator
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=0.0),
+            Generator(id="gen1", name="G", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+        ],
+        edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gen1").owned = 1
+    opt = GreedyOptimizer(game, state)
+    result = opt.optimize(target_time=60.0, max_steps=10)
+    assert result.approximation_level == "exact"
+
+
 def test_greedy_skips_autobuyer_targets():
     """Greedy should not recommend purchasing nodes managed by autobuyers."""
     from idleframework.model.nodes import Resource, Generator, AutobuyerNode

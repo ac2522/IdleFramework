@@ -44,6 +44,7 @@ class OptimizeResult:
     final_production: float = 0.0
     final_balance: float = 0.0
     final_time: float = 0.0
+    approximation_level: str = "exact"
 
 
 class GreedyOptimizer:
@@ -336,6 +337,29 @@ class GreedyOptimizer:
                     "delta_production": delta_prod,
                 })
 
+        # Add prestige candidates
+        from idleframework.model.nodes import PrestigeLayer
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
+        variables = build_state_variables(self.game, self.engine.state)
+        for node in self.game.nodes:
+            if not isinstance(node, PrestigeLayer):
+                continue
+            compiled = compile_formula(node.formula_expr)
+            gain = float(evaluate_formula(compiled, variables))
+            if gain <= 0:
+                continue
+            run_time = self.engine.state.elapsed_time or 1.0
+            eff = gain / run_time
+            candidates.append({
+                "node_id": node.id,
+                "type": "prestige",
+                "cost": 0.0,
+                "efficiency": eff,
+                "delta_production": 0.0,
+            })
+
         return candidates
 
     def optimize(
@@ -383,10 +407,23 @@ class GreedyOptimizer:
             if pay_resource
             else 0.0
         )
+        from idleframework.model.nodes import BuffNode, ProbabilityNode, PrestigeLayer
+        has_buffs = any(isinstance(n, BuffNode) for n in self.game.nodes)
+        has_crit = any(isinstance(n, ProbabilityNode) for n in self.game.nodes)
+        has_prestige = any(isinstance(n, PrestigeLayer) for n in self.game.nodes)
+
+        if has_prestige:
+            level = "greedy_heuristic"
+        elif has_buffs or has_crit:
+            level = "expected_value"
+        else:
+            level = "exact"
+
         return OptimizeResult(
             purchases=purchases,
             timeline=timeline,
             final_production=final_prod,
             final_balance=final_bal,
             final_time=self.engine.current_time,
+            approximation_level=level,
         )
