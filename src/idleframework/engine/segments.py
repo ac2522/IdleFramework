@@ -428,7 +428,9 @@ class PiecewiseEngine:
         ns.last_fired = self._time
 
     def _compute_max_affordable(self, node_id: str) -> int:
-        """Compute maximum affordable count for a node."""
+        """Compute maximum affordable count for a node using closed-form formula."""
+        from idleframework.engine.solvers import max_affordable
+
         node = self._game.get_node(node_id)
         if not isinstance(node, Generator):
             return 1  # Upgrades are 0 or 1
@@ -439,22 +441,12 @@ class PiecewiseEngine:
         balance = self._state.get(currency_id).current_value
         ns = self._state.get(node_id)
 
-        count = 0
-        total_cost = 0.0
-        while True:
-            cost = float(bulk_purchase_cost(
-                BigFloat(node.cost_base),
-                BigFloat(node.cost_growth_rate),
-                ns.owned + count,
-                1,
-            ))
-            if total_cost + cost > balance:
-                break
-            total_cost += cost
-            count += 1
-            if count >= 1000:  # Safety limit
-                break
-        return count
+        return max_affordable(
+            BigFloat(balance),
+            BigFloat(node.cost_base),
+            BigFloat(node.cost_growth_rate),
+            ns.owned,
+        )
 
     # -- Next purchase -------------------------------------------------------
 
