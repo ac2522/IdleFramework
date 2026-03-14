@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from collections import defaultdict
+import re
+from collections import defaultdict, deque
 from typing import TYPE_CHECKING
 
 from idleframework.dsl.compiler import compile_formula, evaluate_formula
@@ -113,17 +114,17 @@ def _topological_sort_edges(edges, game):
             if other.id == e.id:
                 continue
             for var in edge_targets.get(other.id, set()):
-                if var in e.formula:
+                if re.search(rf'\b{re.escape(var)}\b', e.formula):
                     deps[e.id].add(other.id)
 
     # Kahn's algorithm
     in_degree = {e.id: len(deps[e.id]) for e in edges}
-    queue = [e for e in edges if in_degree[e.id] == 0]
+    queue = deque(e for e in edges if in_degree[e.id] == 0)
     result = []
     visited = set()
 
     while queue:
-        e = queue.pop(0)
+        e = queue.popleft()
         if e.id in visited:
             continue
         visited.add(e.id)
