@@ -80,6 +80,54 @@ def test_prestige_non_prestige_raises():
         engine.execute_prestige("gold")
 
 
+def test_higher_layer_persistence_overrides_lower_reset():
+    """Higher layer's persistence_scope should protect nodes from lower layer resets."""
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=0.0),
+            Resource(id="prestige_pts", name="Prestige Points", initial_value=0.0),
+            Resource(id="transcend_pts", name="Transcend Points", initial_value=0.0),
+            Generator(id="gen1", name="Miner", base_production=10.0, cost_base=10.0, cost_growth_rate=1.15),
+            PrestigeLayer(
+                id="prestige", name="Prestige", formula_expr="10.0",
+                layer_index=1,
+                reset_scope=["gold", "gen1", "prestige_pts"],  # Layer 1 resets prestige_pts
+                persistence_scope=[],
+                currency_id="prestige_pts",
+            ),
+            PrestigeLayer(
+                id="transcend", name="Transcend", formula_expr="5.0",
+                layer_index=2,
+                reset_scope=["gold", "gen1", "prestige_pts"],
+                persistence_scope=["prestige_pts"],  # Layer 2 PRESERVES prestige_pts
+                currency_id="transcend_pts",
+                parent_layer="prestige",
+            ),
+        ],
+        edges=[
+            Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+        ],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gold").current_value = 1000.0
+    state.get("prestige_pts").current_value = 50.0
+    state.get("gen1").owned = 5
+    engine = PiecewiseEngine(game, state)
+
+    # Execute layer 2 prestige (transcend)
+    gain = engine.execute_prestige("transcend")
+
+    # prestige_pts should be preserved (higher layer persistence overrides lower reset)
+    # initial_value is 0.0, so if reset fires, it would go to 0 — we expect 50 preserved
+    assert engine.get_balance("prestige_pts") == pytest.approx(50.0)
+    assert engine.get_balance("transcend_pts") == pytest.approx(5.0)
+    # gold and gen1 should be reset
+    assert engine.get_balance("gold") == pytest.approx(0.0)
+    assert engine.get_owned("gen1") == 0
+
+
 def test_layer_run_times_reset():
     game = _make_two_layer_game()
     state = GameState.from_game(game)

@@ -180,6 +180,11 @@ class PiecewiseEngine:
                 )
 
             gen_mult = gen_multipliers.get(node.id, 1.0)
+            # Apply _general_multiplier from backward-compat state modifiers
+            if node.id in modified and "_general_multiplier" in modified[node.id]:
+                gen_mult = apply_property_modifications(
+                    gen_mult, modified[node.id]["_general_multiplier"]
+                )
             buff_mult = buffs.global_multiplier * buffs.per_generator.get(node.id, 1.0)
             syn_mult = synergies.get(node.id, 1.0)
             rate = base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult * syn_mult
@@ -719,10 +724,15 @@ class PiecewiseEngine:
         if node.currency_id:
             self._state.get(node.currency_id).current_value += gain
 
-        # Reset all lower layers first
+        # Collect persistence from the current (highest) layer
+        all_persist = set(node.persistence_scope)
+
+        # Reset all lower layers, but respect higher layer persistence
         for other in self._game.nodes:
             if isinstance(other, PrestigeLayer) and other.layer_index < node.layer_index:
-                self._execute_reset(other.reset_scope, other.persistence_scope)
+                # Merge: lower layer persistence + higher layer persistence
+                merged_persist = set(other.persistence_scope) | all_persist
+                self._execute_reset(other.reset_scope, list(merged_persist))
                 self._state.layer_run_times[other.id] = 0.0
 
         # Reset this layer's scope
