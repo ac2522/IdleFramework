@@ -1081,3 +1081,93 @@ def test_game_validates_synergy_formula():
             schema_version="1.0", name="test",
             nodes=nodes, edges=[], stacking_groups={},
         )
+
+
+def test_state_modifier_validates_numeric_target_property():
+    """State modifier with valid numeric target_property should pass validation."""
+    from idleframework.model.nodes import Resource, Generator
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+
+    # base_production is a float field - should be valid
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold"),
+            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+        ],
+        edges=[
+            Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+            Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
+                 formula="2.0", target_property="base_production", modifier_mode="multiply"),
+        ],
+        stacking_groups={},
+    )
+    # Should not raise
+
+
+def test_state_modifier_rejects_non_numeric_target_property():
+    """State modifier with non-numeric target_property should fail validation."""
+    from idleframework.model.nodes import Resource, Generator
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+
+    with pytest.raises(ValidationError, match="target_property"):
+        GameDefinition(
+            schema_version="1.0", name="test",
+            nodes=[
+                Resource(id="gold", name="Gold"),
+                Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            ],
+            edges=[
+                Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+                Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
+                     formula="2.0", target_property="name", modifier_mode="multiply"),
+            ],
+            stacking_groups={},
+        )
+
+
+def test_state_modifier_accepts_optional_float():
+    """State modifier targeting Optional[float] field like capacity should pass."""
+    from idleframework.model.nodes import Resource, Generator
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+
+    # capacity is float | None — should be accepted
+    game = GameDefinition(
+        schema_version="1.0", name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", capacity=1000.0),
+            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+        ],
+        edges=[
+            Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+            Edge(id="sm1", source="gold", target="gold", edge_type="state_modifier",
+                 formula="2000.0", target_property="capacity", modifier_mode="set"),
+        ],
+        stacking_groups={},
+    )
+    # Should not raise
+
+
+def test_state_modifier_rejects_literal_field():
+    """State modifier targeting a Literal field (like type) should fail."""
+    from idleframework.model.nodes import Resource, Generator
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+
+    with pytest.raises(ValidationError, match="target_property"):
+        GameDefinition(
+            schema_version="1.0", name="test",
+            nodes=[
+                Resource(id="gold", name="Gold"),
+                Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            ],
+            edges=[
+                Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+                Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
+                     formula="2.0", target_property="type", modifier_mode="set"),
+            ],
+            stacking_groups={},
+        )

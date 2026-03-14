@@ -134,6 +134,32 @@ class GameDefinition(BaseModel):
             raise ValueError(f"At most one tickspeed node allowed, found {ts_count}")
 
     def _validate_state_modifier_properties(self) -> None:
+        import typing
+
+        def _is_numeric_type(annotation) -> bool:
+            """Check if a type annotation is or contains float/int."""
+            if annotation is float or annotation is int:
+                return True
+            origin = typing.get_origin(annotation)
+            if origin is typing.Union:
+                # float | None, Optional[float], etc.
+                return any(
+                    _is_numeric_type(a)
+                    for a in typing.get_args(annotation)
+                    if a is not type(None)
+                )
+            # Handle types.UnionType (Python 3.10+ X | Y syntax)
+            if hasattr(annotation, "__args__"):
+                origin_check = getattr(annotation, "__origin__", None)
+                if origin_check is None and hasattr(annotation, "__args__"):
+                    # types.UnionType (e.g., float | None)
+                    return any(
+                        _is_numeric_type(a)
+                        for a in annotation.__args__
+                        if a is not type(None)
+                    )
+            return False
+
         node_map = {n.id: n for n in self.nodes}
         for edge in self.edges:
             if edge.edge_type == "state_modifier" and edge.target_property is not None:
@@ -141,11 +167,9 @@ class GameDefinition(BaseModel):
                 if target_node is None:
                     continue  # caught by _validate_edge_references
                 valid_fields = {
-                    name for name, info in type(target_node).model_fields.items()
-                    if info.annotation in (float, int, "float", "int")
-                    or str(info.annotation).startswith("float")
-                    or str(info.annotation).startswith("int")
-                    or "float" in str(info.annotation)
+                    name
+                    for name, info in type(target_node).model_fields.items()
+                    if _is_numeric_type(info.annotation)
                 }
                 if edge.target_property not in valid_fields:
                     raise ValueError(
