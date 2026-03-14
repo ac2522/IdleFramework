@@ -1,6 +1,6 @@
 import type { Node, Edge } from '@xyflow/react'
 
-// -- Node data types for each of 16 node types --
+// -- Node data types for each of 22 node types --
 
 interface NodeDataBase {
   label: string

@@ -348,11 +348,21 @@ class PiecewiseEngine:
 
     def compute_drain_rates(self) -> dict[str, float]:
         """Compute per-resource drain rates from active DrainNodes."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
         drains: dict[str, float] = {}
         for drain in self._drains.values():
             ns = self._state.get(drain.id)
             if not ns.active:
                 continue
+            # Evaluate condition if present
+            if drain.condition is not None:
+                variables = build_state_variables(self._game, self._state)
+                compiled = compile_formula(drain.condition)
+                result = float(evaluate_formula(compiled, variables))
+                if result <= 0:
+                    continue
             # Find target resource via consumption edge
             for edge in self._game.get_edges_from(drain.id):
                 if edge.edge_type == "consumption":

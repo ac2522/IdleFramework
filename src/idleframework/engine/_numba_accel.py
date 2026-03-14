@@ -1,7 +1,11 @@
-"""Numba-accelerated inner loops for engine hot paths.
+"""Numba-accelerated inner loops for engine hot paths (stub).
 
-These functions are used when Numba is available, with pure-Python
-fallback when it's not installed.
+These functions provide Numba-accelerated alternatives to engine hot paths.
+Currently a stub — not imported by segments.py or solvers.py. Integration
+is deferred until profiling identifies bottlenecks worth accelerating.
+
+When Numba is available, functions are JIT-compiled. Otherwise, the pure-Python
+fallback is used transparently.
 """
 try:
     from numba import njit
