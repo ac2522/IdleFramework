@@ -87,16 +87,17 @@ def _get_game_or_404(game_id: str) -> GameDefinition:
 
 @router.post("/run", response_model=AnalysisResponse)
 def run_analysis(req: AnalysisRequest):
-    """Run full analysis on a game definition.
-
-    NOTE/TODO: AnalysisRequest fields (optimizer, beam_width,
-    mcts_iterations, mcts_seed, bnb_depth, tags) are not yet
-    forwarded to run_full_analysis.
-    """
+    """Run full analysis on a game definition."""
     game = _get_game_or_404(req.game_id)
     try:
         report = run_full_analysis(
-            game, simulation_time=req.simulation_time
+            game,
+            simulation_time=req.simulation_time,
+            optimizer=req.optimizer,
+            beam_width=req.beam_width,
+            mcts_iterations=req.mcts_iterations,
+            mcts_seed=req.mcts_seed,
+            bnb_depth=req.bnb_depth,
         )
     except ValueError as exc:
         raise HTTPException(
