@@ -123,8 +123,13 @@ def _build_state(
     prestige = None
     for node in game.nodes:
         if isinstance(node, PrestigeLayer):
+            currency_value = 0.0
+            if node.currency_id:
+                currency_ns = engine.state.get(node.currency_id)
+                if currency_ns is not None:
+                    currency_value = currency_ns.current_value
             prestige = PrestigeState(
-                available_currency=0.0,
+                available_currency=currency_value,
                 formula_preview=node.formula_expr,
             )
             break
@@ -272,17 +277,20 @@ def prestige_session(session_id: str):
             ).model_dump(),
         )
 
-    raise HTTPException(
-        status_code=501,
-        detail=ErrorResponse(
-            error="not_implemented",
-            detail=(
-                "Prestige currency application"
-                " is not yet implemented"
-            ),
-            status=501,
-        ).model_dump(),
-    )
+    engine = session.engine
+    try:
+        engine.execute_prestige(prestige_node.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="prestige_failed",
+                detail=str(exc),
+                status=400,
+            ).model_dump(),
+        ) from exc
+
+    return _build_state(session)
 
 
 @router.post(

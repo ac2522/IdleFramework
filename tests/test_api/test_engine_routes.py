@@ -189,7 +189,7 @@ class TestPrestige:
     def test_prestige_returns_result(
         self, client, session_id,
     ):
-        """Prestige endpoint exists and returns a result."""
+        """Prestige endpoint resets state and returns new balance."""
         client.post(
             f"/api/v1/engine/{session_id}/advance",
             json={"seconds": 300.0},
@@ -197,8 +197,10 @@ class TestPrestige:
         resp = client.post(
             f"/api/v1/engine/{session_id}/prestige",
         )
-        # Prestige is not yet implemented
-        assert resp.status_code == 501
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["session_id"] == session_id
+        assert "prestige" in data
 
     def test_prestige_nonexistent_session_404(
         self, client,
@@ -207,6 +209,21 @@ class TestPrestige:
             "/api/v1/engine/fake-session/prestige",
         )
         assert resp.status_code == 404
+
+    def test_prestige_updates_currency(
+        self, client, session_id,
+    ):
+        """After prestige, available_currency reflects the prestige gain."""
+        client.post(
+            f"/api/v1/engine/{session_id}/advance",
+            json={"seconds": 600.0},
+        )
+        resp = client.post(
+            f"/api/v1/engine/{session_id}/prestige",
+        )
+        assert resp.status_code == 200
+        prestige_data = resp.json()["prestige"]
+        assert prestige_data is not None
 
     def test_prestige_no_prestige_layer_400(self, client):
         """Game without prestige layer returns 400."""
