@@ -33,6 +33,7 @@ dev = [
     "ruff>=0.4",
     "httpx>=0.28",
     "pytest-timeout>=2.0",
+    "pytest-cov>=6.0",
     "idleframework[server]",
 ]
 
@@ -44,6 +45,22 @@ packages = ["src/idleframework", "server"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/idleframework", "server"]
+omit = [
+    "src/idleframework/_bigfloat_cython.pyx",
+    "src/idleframework/engine/_numba_accel.py",
+    "benchmarks/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+]
 
 [tool.ruff]
 target-version = "py312"
