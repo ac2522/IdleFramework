@@ -82,8 +82,10 @@ class TestSingleSegmentConstant:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -122,8 +124,10 @@ class TestPurchaseCreatesNewSegment:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -166,8 +170,10 @@ class TestFreePurchaseThreshold:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
             free_purchase_threshold=1e-5,
@@ -208,8 +214,10 @@ class TestChatteringDetection:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
             event_epsilon=0.001,
@@ -260,12 +268,16 @@ class TestStaleEventRecomputation:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
                 {
-                    "id": "e2", "source": "newspaper",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e2",
+                    "source": "newspaper",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -350,8 +362,10 @@ class TestConvergenceVsRK4:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -436,12 +450,16 @@ class TestMultipleGeneratorsCombinedRate:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
                 {
-                    "id": "e2", "source": "newspaper",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e2",
+                    "source": "newspaper",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -481,12 +499,16 @@ class TestMultipleGeneratorsCombinedRate:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
                 {
-                    "id": "e2", "source": "newspaper",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e2",
+                    "source": "newspaper",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -536,8 +558,10 @@ class TestUpgradePurchaseChangesMultiplier:
             ],
             edges=[
                 {
-                    "id": "e1", "source": "lemonade",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e1",
+                    "source": "lemonade",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
         )
@@ -584,8 +608,10 @@ def test_segment_new_fields():
 
 def test_segment_new_fields_defaults():
     seg = Segment(
-        start_time=0.0, end_time=10.0,
-        production_rates={}, multiplier=1.0,
+        start_time=0.0,
+        end_time=10.0,
+        production_rates={},
+        multiplier=1.0,
     )
     assert seg.drain_rates == {}
     assert seg.net_rates == {}

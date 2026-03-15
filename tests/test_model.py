@@ -477,12 +477,19 @@ class TestUpgradeTargetValidation:
             nodes=[
                 Resource(id="gold", name="Gold"),
                 Generator(
-                    id="gen1", name="G", base_production=1.0,
-                    cost_base=10.0, cost_growth_rate=1.07,
+                    id="gen1",
+                    name="G",
+                    base_production=1.0,
+                    cost_base=10.0,
+                    cost_growth_rate=1.07,
                 ),
                 Upgrade(
-                    id="upg1", name="U", upgrade_type="multiplicative",
-                    magnitude=2.0, cost=50.0, target="gen1",
+                    id="upg1",
+                    name="U",
+                    upgrade_type="multiplicative",
+                    magnitude=2.0,
+                    cost=50.0,
+                    target="gen1",
                     stacking_group="speed",
                 ),
             ],
@@ -500,8 +507,12 @@ class TestUpgradeTargetValidation:
             nodes=[
                 Resource(id="gold", name="Gold"),
                 Upgrade(
-                    id="upg1", name="U", upgrade_type="multiplicative",
-                    magnitude=2.0, cost=50.0, target="_all",
+                    id="upg1",
+                    name="U",
+                    upgrade_type="multiplicative",
+                    magnitude=2.0,
+                    cost=50.0,
+                    target="_all",
                     stacking_group="speed",
                 ),
             ],
@@ -520,8 +531,12 @@ class TestUpgradeTargetValidation:
                 nodes=[
                     Resource(id="gold", name="Gold"),
                     Upgrade(
-                        id="upg1", name="U", upgrade_type="multiplicative",
-                        magnitude=2.0, cost=50.0, target="nonexistent",
+                        id="upg1",
+                        name="U",
+                        upgrade_type="multiplicative",
+                        magnitude=2.0,
+                        cost=50.0,
+                        target="nonexistent",
                         stacking_group="speed",
                     ),
                 ],
@@ -546,7 +561,9 @@ class TestEdgeReferentialIntegrity:
                 nodes=[Resource(id="gold", name="Gold")],
                 edges=[
                     Edge(
-                        id="e1", source="nonexistent_source", target="gold",
+                        id="e1",
+                        source="nonexistent_source",
+                        target="gold",
                         edge_type="production_target",
                     ),
                 ],
@@ -565,13 +582,18 @@ class TestEdgeReferentialIntegrity:
                 nodes=[
                     Resource(id="gold", name="Gold"),
                     Generator(
-                        id="gen1", name="G", base_production=1.0,
-                        cost_base=10.0, cost_growth_rate=1.07,
+                        id="gen1",
+                        name="G",
+                        base_production=1.0,
+                        cost_base=10.0,
+                        cost_growth_rate=1.07,
                     ),
                 ],
                 edges=[
                     Edge(
-                        id="e1", source="gen1", target="nonexistent_target",
+                        id="e1",
+                        source="gen1",
+                        target="nonexistent_target",
                         edge_type="production_target",
                     ),
                 ],
@@ -590,13 +612,18 @@ class TestEdgeReferentialIntegrity:
                 nodes=[
                     Resource(id="gold", name="Gold"),
                     Generator(
-                        id="gen1", name="G", base_production=1.0,
-                        cost_base=10.0, cost_growth_rate=1.07,
+                        id="gen1",
+                        name="G",
+                        base_production=1.0,
+                        cost_base=10.0,
+                        cost_growth_rate=1.07,
                     ),
                 ],
                 edges=[
                     Edge(
-                        id="e1", source="gen1", target="gold",
+                        id="e1",
+                        source="gen1",
+                        target="gold",
                         edge_type="state_modifier",
                     ),
                 ],
@@ -718,14 +745,20 @@ class TestFormulaValidation:
             nodes=[
                 Resource(id="gold", name="Gold"),
                 Generator(
-                    id="gen1", name="G", base_production=1.0,
-                    cost_base=10.0, cost_growth_rate=1.07,
+                    id="gen1",
+                    name="G",
+                    base_production=1.0,
+                    cost_base=10.0,
+                    cost_growth_rate=1.07,
                 ),
             ],
             edges=[
                 Edge(
-                    id="e1", source="gen1", target="gold",
-                    edge_type="state_modifier", formula="base * 2",
+                    id="e1",
+                    source="gen1",
+                    target="gold",
+                    edge_type="state_modifier",
+                    formula="base * 2",
                 ),
             ],
             stacking_groups={},
@@ -743,14 +776,20 @@ class TestFormulaValidation:
                 nodes=[
                     Resource(id="gold", name="Gold"),
                     Generator(
-                        id="gen1", name="G", base_production=1.0,
-                        cost_base=10.0, cost_growth_rate=1.07,
+                        id="gen1",
+                        name="G",
+                        base_production=1.0,
+                        cost_base=10.0,
+                        cost_growth_rate=1.07,
                     ),
                 ],
                 edges=[
                     Edge(
-                        id="e1", source="gen1", target="gold",
-                        edge_type="state_modifier", formula="!@#invalid",
+                        id="e1",
+                        source="gen1",
+                        target="gold",
+                        edge_type="state_modifier",
+                        formula="!@#invalid",
                     ),
                 ],
                 stacking_groups={},
@@ -772,8 +811,11 @@ class TestGameState:
             nodes=[
                 Resource(id="gold", name="Gold", initial_value=100.0),
                 Generator(
-                    id="gen1", name="Miner", base_production=1.0,
-                    cost_base=10.0, cost_growth_rate=1.07,
+                    id="gen1",
+                    name="Miner",
+                    base_production=1.0,
+                    cost_base=10.0,
+                    cost_growth_rate=1.07,
                 ),
             ],
             edges=[
@@ -845,9 +887,11 @@ def test_tickspeed_node_creation():
     assert node.base_tickspeed == 1.5
     assert node.name == "Tickspeed"
 
+
 def test_tickspeed_node_default():
     node = TickspeedNode(id="ts1")
     assert node.base_tickspeed == 1.0
+
 
 # --- Task 2: AutobuyerNode ---
 def test_autobuyer_node_creation():
@@ -860,10 +904,12 @@ def test_autobuyer_node_creation():
     assert node.enabled is True
     assert node.condition is None
 
+
 def test_autobuyer_node_with_condition():
     node = AutobuyerNode(id="ab1", target="gen1", condition="balance > cost * 2", bulk_amount="max")
     assert node.condition == "balance > cost * 2"
     assert node.bulk_amount == "max"
+
 
 # --- Task 3: DrainNode ---
 def test_drain_node_creation():
@@ -872,9 +918,11 @@ def test_drain_node_creation():
     assert node.rate == 5.0
     assert node.condition is None
 
+
 def test_drain_node_with_condition():
     node = DrainNode(id="drain1", rate=3.0, condition="active == 1")
     assert node.condition == "active == 1"
+
 
 # --- Task 4: BuffNode ---
 def test_buff_node_timed():
@@ -884,14 +932,17 @@ def test_buff_node_timed():
     assert node.duration == 10.0
     assert node.cooldown == 50.0
 
+
 def test_buff_node_proc():
     node = BuffNode(id="b1", buff_type="proc", proc_chance=0.05, multiplier=2.0)
     assert node.proc_chance == 0.05
     assert node.target is None
 
+
 def test_buff_node_zero_cooldown():
     node = BuffNode(id="b1", buff_type="timed", duration=10.0, multiplier=5.0, cooldown=0.0)
     assert node.cooldown == 0.0
+
 
 # --- Task 5: SynergyNode ---
 def test_synergy_node_creation():
@@ -911,7 +962,9 @@ def test_edge_state_modifier_with_target_property():
     from idleframework.model.edges import Edge
 
     edge = Edge(
-        id="e1", source="upg1", target="gen1",
+        id="e1",
+        source="upg1",
+        target="gen1",
         edge_type="state_modifier",
         formula="owned * 0.05",
         target_property="crit_chance",
@@ -920,11 +973,14 @@ def test_edge_state_modifier_with_target_property():
     assert edge.target_property == "crit_chance"
     assert edge.modifier_mode == "add"
 
+
 def test_edge_backward_compat_no_target_property():
     from idleframework.model.edges import Edge
 
     edge = Edge(
-        id="e1", source="upg1", target="gen1",
+        id="e1",
+        source="upg1",
+        target="gen1",
         edge_type="state_modifier",
         formula="2.0",
     )
@@ -947,6 +1003,7 @@ def test_prestige_layer_multi_layer_fields():
     assert node.currency_id == "prestige_currency"
     assert node.parent_layer == "p2"
 
+
 def test_prestige_layer_backward_compat():
     from idleframework.model.nodes import PrestigeLayer
 
@@ -968,6 +1025,7 @@ def test_resource_capacity():
     assert node.capacity == 1000.0
     assert node.overflow_behavior == "clamp"
 
+
 def test_resource_no_capacity():
     from idleframework.model.nodes import Resource
 
@@ -982,11 +1040,13 @@ def test_converter_io_with_formula():
     cio = ConverterIO(resource="gold", amount=10.0, formula="conversion_count * 0.9")
     assert cio.formula == "conversion_count * 0.9"
 
+
 def test_converter_io_no_formula():
     from idleframework.model.nodes import ConverterIO
 
     cio = ConverterIO(resource="gold", amount=10.0)
     assert cio.formula is None
+
 
 def test_converter_scaling_recipe():
     from idleframework.model.nodes import Converter, ConverterIO
@@ -1010,17 +1070,20 @@ def test_node_state_last_fired():
     ns = NodeState(last_fired=5.0)
     assert ns.last_fired == 5.0
 
+
 def test_node_state_last_fired_default():
     from idleframework.model.state import NodeState
 
     ns = NodeState()
     assert ns.last_fired == 0.0
 
+
 def test_game_state_layer_run_times():
-    from idleframework.model.state import GameState, NodeState
+    from idleframework.model.state import GameState
 
     gs = GameState(node_states={}, layer_run_times={"p1": 100.0})
     assert gs.layer_run_times["p1"] == 100.0
+
 
 def test_game_state_layer_run_times_default():
     from idleframework.model.state import GameState
@@ -1031,11 +1094,13 @@ def test_game_state_layer_run_times_default():
 
 # --- Task 12: GameDefinition validation for new node types ---
 
+
 def test_game_validates_tickspeed_singleton():
     """Only one TickspeedNode allowed per game."""
     from pydantic import ValidationError
-    from idleframework.model.nodes import Resource
+
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Resource
 
     nodes = [
         Resource(id="r1", name="Gold"),
@@ -1044,32 +1109,53 @@ def test_game_validates_tickspeed_singleton():
     ]
     with pytest.raises(ValidationError, match="tickspeed"):
         GameDefinition(
-            schema_version="1.0", name="test",
-            nodes=nodes, edges=[], stacking_groups={},
+            schema_version="1.0",
+            name="test",
+            nodes=nodes,
+            edges=[],
+            stacking_groups={},
         )
 
 
 def test_game_validates_state_modifier_target_property():
     """target_property must be a valid numeric field on target node."""
     from pydantic import ValidationError
-    from idleframework.model.edges import Edge
-    from idleframework.model.nodes import Generator, Resource
-    from idleframework.model.game import GameDefinition
 
-    nodes = [Resource(id="r1", name="Gold"), Generator(id="g1", name="Gen", base_production=1, cost_base=1, cost_growth_rate=1.15)]
-    edges = [Edge(id="e1", source="r1", target="g1", edge_type="state_modifier", formula="2", target_property="nonexistent_field", modifier_mode="multiply")]
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
+
+    nodes = [
+        Resource(id="r1", name="Gold"),
+        Generator(id="g1", name="Gen", base_production=1, cost_base=1, cost_growth_rate=1.15),
+    ]
+    edges = [
+        Edge(
+            id="e1",
+            source="r1",
+            target="g1",
+            edge_type="state_modifier",
+            formula="2",
+            target_property="nonexistent_field",
+            modifier_mode="multiply",
+        )
+    ]
     with pytest.raises(ValidationError, match="target_property"):
         GameDefinition(
-            schema_version="1.0", name="test",
-            nodes=nodes, edges=edges, stacking_groups={},
+            schema_version="1.0",
+            name="test",
+            nodes=nodes,
+            edges=edges,
+            stacking_groups={},
         )
 
 
 def test_game_validates_synergy_formula():
     """SynergyNode formula_expr must compile."""
     from pydantic import ValidationError
-    from idleframework.model.nodes import Generator, Resource
+
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
 
     nodes = [
         Resource(id="r1", name="Gold"),
@@ -1078,28 +1164,41 @@ def test_game_validates_synergy_formula():
     ]
     with pytest.raises(ValidationError, match="[Ff]ormula"):
         GameDefinition(
-            schema_version="1.0", name="test",
-            nodes=nodes, edges=[], stacking_groups={},
+            schema_version="1.0",
+            name="test",
+            nodes=nodes,
+            edges=[],
+            stacking_groups={},
         )
 
 
 def test_state_modifier_validates_numeric_target_property():
     """State modifier with valid numeric target_property should pass validation."""
-    from idleframework.model.nodes import Resource, Generator
     from idleframework.model.edges import Edge
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
 
     # base_production is a float field - should be valid
-    game = GameDefinition(
-        schema_version="1.0", name="test",
+    GameDefinition(
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
-            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
-            Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
-                 formula="2.0", target_property="base_production", modifier_mode="multiply"),
+            Edge(
+                id="sm1",
+                source="gold",
+                target="gen1",
+                edge_type="state_modifier",
+                formula="2.0",
+                target_property="base_production",
+                modifier_mode="multiply",
+            ),
         ],
         stacking_groups={},
     )
@@ -1108,21 +1207,35 @@ def test_state_modifier_validates_numeric_target_property():
 
 def test_state_modifier_rejects_non_numeric_target_property():
     """State modifier with non-numeric target_property should fail validation."""
-    from idleframework.model.nodes import Resource, Generator
     from idleframework.model.edges import Edge
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
 
     with pytest.raises(ValidationError, match="target_property"):
         GameDefinition(
-            schema_version="1.0", name="test",
+            schema_version="1.0",
+            name="test",
             nodes=[
                 Resource(id="gold", name="Gold"),
-                Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+                Generator(
+                    id="gen1",
+                    name="Miner",
+                    base_production=1.0,
+                    cost_base=10,
+                    cost_growth_rate=1.15,
+                ),
             ],
             edges=[
                 Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
-                Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
-                     formula="2.0", target_property="name", modifier_mode="multiply"),
+                Edge(
+                    id="sm1",
+                    source="gold",
+                    target="gen1",
+                    edge_type="state_modifier",
+                    formula="2.0",
+                    target_property="name",
+                    modifier_mode="multiply",
+                ),
             ],
             stacking_groups={},
         )
@@ -1130,21 +1243,31 @@ def test_state_modifier_rejects_non_numeric_target_property():
 
 def test_state_modifier_accepts_optional_float():
     """State modifier targeting Optional[float] field like capacity should pass."""
-    from idleframework.model.nodes import Resource, Generator
     from idleframework.model.edges import Edge
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
 
     # capacity is float | None — should be accepted
-    game = GameDefinition(
-        schema_version="1.0", name="test",
+    GameDefinition(
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", capacity=1000.0),
-            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
-            Edge(id="sm1", source="gold", target="gold", edge_type="state_modifier",
-                 formula="2000.0", target_property="capacity", modifier_mode="set"),
+            Edge(
+                id="sm1",
+                source="gold",
+                target="gold",
+                edge_type="state_modifier",
+                formula="2000.0",
+                target_property="capacity",
+                modifier_mode="set",
+            ),
         ],
         stacking_groups={},
     )
@@ -1153,21 +1276,35 @@ def test_state_modifier_accepts_optional_float():
 
 def test_state_modifier_rejects_literal_field():
     """State modifier targeting a Literal field (like type) should fail."""
-    from idleframework.model.nodes import Resource, Generator
     from idleframework.model.edges import Edge
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
 
     with pytest.raises(ValidationError, match="target_property"):
         GameDefinition(
-            schema_version="1.0", name="test",
+            schema_version="1.0",
+            name="test",
             nodes=[
                 Resource(id="gold", name="Gold"),
-                Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+                Generator(
+                    id="gen1",
+                    name="Miner",
+                    base_production=1.0,
+                    cost_base=10,
+                    cost_growth_rate=1.15,
+                ),
             ],
             edges=[
                 Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
-                Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
-                     formula="2.0", target_property="type", modifier_mode="set"),
+                Edge(
+                    id="sm1",
+                    source="gold",
+                    target="gen1",
+                    edge_type="state_modifier",
+                    formula="2.0",
+                    target_property="type",
+                    modifier_mode="set",
+                ),
             ],
             stacking_groups={},
         )

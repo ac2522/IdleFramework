@@ -74,37 +74,29 @@ def check_edge_compatibility(game: GameDefinition) -> list[str]:
         source_node = node_map[edge.source]
 
         # production_target source must be generator or nested_generator
-        if (
-            edge.edge_type == "production_target"
-            and not isinstance(source_node, (Generator, NestedGenerator))
+        if edge.edge_type == "production_target" and not isinstance(
+            source_node, (Generator, NestedGenerator)
         ):
             errors.append(
-                    f"Edge {edge.id!r}: production_target source {edge.source!r} "
-                    f"is not a generator or nested_generator (type={source_node.type!r})"
-                )
+                f"Edge {edge.id!r}: production_target source {edge.source!r} "
+                f"is not a generator or nested_generator (type={source_node.type!r})"
+            )
 
         # upgrade_target source must be an upgrade
-        if (
-            edge.edge_type == "upgrade_target"
-            and not isinstance(source_node, Upgrade)
-        ):
+        if edge.edge_type == "upgrade_target" and not isinstance(source_node, Upgrade):
             errors.append(
-                    f"Edge {edge.id!r}: upgrade_target source {edge.source!r} "
-                    f"is not an upgrade (type={source_node.type!r})"
-                )
+                f"Edge {edge.id!r}: upgrade_target source {edge.source!r} "
+                f"is not an upgrade (type={source_node.type!r})"
+            )
 
         # state_modifier must have a formula
         if edge.edge_type == "state_modifier" and not edge.formula:
-            errors.append(
-                f"Edge {edge.id!r}: state_modifier edge must have a formula"
-            )
+            errors.append(f"Edge {edge.id!r}: state_modifier edge must have a formula")
 
     return errors
 
 
-def check_tag_subgraph(
-    game: GameDefinition, active_tags: list[str]
-) -> TagFilterResult:
+def check_tag_subgraph(game: GameDefinition, active_tags: list[str]) -> TagFilterResult:
     """Filter nodes by tags and report broken dependencies.
 
     Nodes with no tags pass through (available to all).
@@ -170,8 +162,6 @@ def validate_graph(game: GameDefinition) -> list[str]:
 
     cycles = find_dependency_cycles(game)
     for cycle in cycles:
-        errors.append(
-            f"Unlock dependency cycle detected: {' -> '.join(cycle)}"
-        )
+        errors.append(f"Unlock dependency cycle detected: {' -> '.join(cycle)}")
 
     return errors

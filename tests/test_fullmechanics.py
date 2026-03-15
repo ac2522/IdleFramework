@@ -1,8 +1,9 @@
 """Integration tests exercising all Phase 5 mechanics together."""
-import pytest
+
 from fixtures.fullmechanics import make_fullmechanics_game
-from idleframework.model.state import GameState
+
 from idleframework.engine.segments import PiecewiseEngine
+from idleframework.model.state import GameState
 from idleframework.optimizer.greedy import GreedyOptimizer
 
 
@@ -30,25 +31,38 @@ def test_fullmechanics_greedy_optimizer():
     The greedy optimizer is a single-currency optimizer. We use a gold-only
     sub-game from the fixture (miner + smith + upgrades) to verify it works.
     """
-    from idleframework.model.nodes import Resource, Generator, Upgrade, TickspeedNode
     from idleframework.model.edges import Edge
     from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource, Upgrade
 
     # Build a gold-only subset of the FullMechanics game
     nodes = [
         Resource(id="gold", name="Gold", initial_value=0.0),
-        Generator(id="miner", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
-        Generator(id="smith", name="Smith", base_production=5.0, cost_base=100, cost_growth_rate=1.15),
-        Upgrade(id="upg_speed", name="Speed Boost", upgrade_type="multiplicative",
-                magnitude=2.0, cost=500.0, target="miner", stacking_group="speed"),
+        Generator(
+            id="miner", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+        ),
+        Generator(
+            id="smith", name="Smith", base_production=5.0, cost_base=100, cost_growth_rate=1.15
+        ),
+        Upgrade(
+            id="upg_speed",
+            name="Speed Boost",
+            upgrade_type="multiplicative",
+            magnitude=2.0,
+            cost=500.0,
+            target="miner",
+            stacking_group="speed",
+        ),
     ]
     edges = [
         Edge(id="e_miner_gold", source="miner", target="gold", edge_type="production_target"),
         Edge(id="e_smith_gold", source="smith", target="gold", edge_type="production_target"),
     ]
     game = GameDefinition(
-        schema_version="1.0", name="GoldOnly",
-        nodes=nodes, edges=edges,
+        schema_version="1.0",
+        name="GoldOnly",
+        nodes=nodes,
+        edges=edges,
         stacking_groups={"speed": "multiplicative"},
     )
     state = GameState.from_game(game)

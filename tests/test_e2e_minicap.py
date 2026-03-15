@@ -1,4 +1,5 @@
 """End-to-end tests on MiniCap fixture."""
+
 import json
 import math
 from pathlib import Path
@@ -68,12 +69,12 @@ class TestMiniCapCosts:
 
     def test_tenth_lemonade_cost(self, minicap_engine):
         cost = bulk_cost(4.0, 1.07, 9, 1)
-        expected = 4 * (1.07 ** 9)
+        expected = 4 * (1.07**9)
         assert cost == pytest.approx(expected, rel=1e-5)
 
     def test_bulk_10_lemonades(self):
         cost = bulk_cost(4.0, 1.07, 0, 10)
-        expected = 4 * ((1.07 ** 10) - 1) / (1.07 - 1)
+        expected = 4 * ((1.07**10) - 1) / (1.07 - 1)
         assert cost == pytest.approx(expected, rel=1e-5)
 
 
@@ -121,16 +122,12 @@ class TestMiniCapUpgrades:
 
 class TestMiniCapPrestige:
     def test_prestige_formula(self, minicap_engine):
-        angels = minicap_engine.evaluate_prestige(
-            "prestige", lifetime_earnings=1e18
-        )
+        angels = minicap_engine.evaluate_prestige("prestige", lifetime_earnings=1e18)
         expected = 150 * math.sqrt(1e18 / 1e15)
         assert angels == pytest.approx(expected, rel=1e-3)
 
     def test_prestige_formula_at_threshold(self, minicap_engine):
-        angels = minicap_engine.evaluate_prestige(
-            "prestige", lifetime_earnings=1e15
-        )
+        angels = minicap_engine.evaluate_prestige("prestige", lifetime_earnings=1e15)
         assert angels == pytest.approx(150.0, rel=1e-3)
 
 

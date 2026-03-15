@@ -21,6 +21,7 @@ from idleframework.bigfloat import BigFloat
 
 try:
     from idleframework.engine._numba_accel import bulk_purchase_cost_fast as _fast_bulk
+
     _HAS_FAST = True
 except Exception:
     _HAS_FAST = False
@@ -52,9 +53,7 @@ def time_to_afford(cost: BigFloat, production_rate: BigFloat) -> BigFloat:
     return cost / production_rate
 
 
-def bulk_purchase_cost(
-    base: BigFloat, rate: BigFloat, owned: int, quantity: int
-) -> BigFloat:
+def bulk_purchase_cost(base: BigFloat, rate: BigFloat, owned: int, quantity: int) -> BigFloat:
     """Compute the total cost of buying multiple items with geometric scaling.
 
     Each successive item costs `rate` times more than the previous one.
@@ -77,10 +76,15 @@ def bulk_purchase_cost(
 
     # Fast path: when both base and rate fit in float64 (exponent == 0),
     # delegate to the Numba-accelerated implementation.
-    if _HAS_FAST and isinstance(base, BigFloat) and isinstance(rate, BigFloat):
-        if base.exponent == 0 and rate.exponent == 0:
-            result = _fast_bulk(base.mantissa, rate.mantissa, owned, quantity)
-            return BigFloat(result)
+    if (
+        _HAS_FAST
+        and isinstance(base, BigFloat)
+        and isinstance(rate, BigFloat)
+        and base.exponent == 0
+        and rate.exponent == 0
+    ):
+        result = _fast_bulk(base.mantissa, rate.mantissa, owned, quantity)
+        return BigFloat(result)
 
     rate_f = float(rate)
 
@@ -91,17 +95,15 @@ def bulk_purchase_cost(
 
     # General geometric series:
     # sum_{k=0}^{n-1} base * rate^(owned+k) = base * rate^owned * (rate^n - 1) / (rate - 1)
-    rate_to_owned = rate ** owned
-    rate_to_n = rate ** quantity
+    rate_to_owned = rate**owned
+    rate_to_n = rate**quantity
     numerator = rate_to_n - BigFloat(1)
     denominator = rate - BigFloat(1)
 
     return base * rate_to_owned * (numerator / denominator)
 
 
-def max_affordable(
-    currency: BigFloat, base: BigFloat, rate: BigFloat, owned: int
-) -> int:
+def max_affordable(currency: BigFloat, base: BigFloat, rate: BigFloat, owned: int) -> int:
     """Compute the maximum number of items affordable given current currency.
 
     This is the inverse of bulk_purchase_cost: find the largest n such that
@@ -134,7 +136,7 @@ def max_affordable(
     # rate^n - 1 <= currency * (rate - 1) / (base * rate^owned)
     # rate^n <= currency * (rate - 1) / (base * rate^owned) + 1
     # n <= log_rate(currency * (rate - 1) / (base * rate^owned) + 1)
-    rate_to_owned = rate ** owned
+    rate_to_owned = rate**owned
     denominator = base * rate_to_owned
 
     if denominator._is_zero():
@@ -213,7 +215,7 @@ def generator_chain_production(
         # Production at bottom = product(rates) * t^n / n!
         # This is the standard generator chain formula
         rate_product = math.prod(chain_rates)
-        return rate_product * (time ** n) / math.factorial(n)
+        return rate_product * (time**n) / math.factorial(n)
 
     # With initial counts: each tier i with c_i units at t=0 contributes
     # to the bottom tier's accumulated production by propagating down
@@ -232,17 +234,13 @@ def generator_chain_production(
         if initial_counts[i] == 0:
             continue
         rate_product = math.prod(chain_rates[: i + 1])
-        contribution = (
-            initial_counts[i] * rate_product * (time ** (i + 1)) / math.factorial(i + 1)
-        )
+        contribution = initial_counts[i] * rate_product * (time ** (i + 1)) / math.factorial(i + 1)
         total += contribution
 
     return total
 
 
-def time_to_afford_polynomial(
-    cost: float, production_coefficients: list[float]
-) -> float:
+def time_to_afford_polynomial(cost: float, production_coefficients: list[float]) -> float:
     """Compute time to accumulate `cost` when production is polynomial in time.
 
     Production rate at time t: P(t) = sum(c_i * t^i) for i = 0..degree
@@ -320,8 +318,7 @@ def time_to_afford_polynomial(
         upper *= 2.0
     else:
         raise ValueError(
-            "Could not bracket root for polynomial solver: "
-            "production may be zero or negative"
+            "Could not bracket root for polynomial solver: production may be zero or negative"
         )
 
     t_solution = brentq(accumulated, 0.0, upper, xtol=1e-12)
@@ -369,9 +366,8 @@ def efficiency_score(delta_production: BigFloat, cost: BigFloat) -> float:
 
 # -- Aliases for optimizer compatibility ------------------------------------
 
-def bulk_cost(
-    base: float, rate: float, owned: int, count: int
-) -> float:
+
+def bulk_cost(base: float, rate: float, owned: int, count: int) -> float:
     """Plain-float wrapper around bulk_purchase_cost for optimizer use."""
     result = bulk_purchase_cost(BigFloat(base), BigFloat(rate), owned, count)
     return float(result)

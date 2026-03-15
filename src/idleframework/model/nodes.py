@@ -140,9 +140,9 @@ class ProbabilityNode(NodeBase):
 class EndCondition(NodeBase):
     type: Literal["end_condition"] = "end_condition"
     name: str = ""
-    condition_type: Literal[
-        "single_threshold", "multi_threshold", "collection", "compound"
-    ] = "single_threshold"
+    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = (
+        "single_threshold"
+    )
     targets: list[ConditionTarget]
     logic: str = "and"
 
@@ -150,9 +150,9 @@ class EndCondition(NodeBase):
 class UnlockGate(NodeBase):
     type: Literal["unlock_gate"] = "unlock_gate"
     name: str = ""
-    condition_type: Literal[
-        "single_threshold", "multi_threshold", "collection", "compound"
-    ] = "single_threshold"
+    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = (
+        "single_threshold"
+    )
     targets: list[ConditionTarget]
     prerequisites: list[str]
     logic: str = "and"
@@ -236,10 +236,26 @@ class SynergyNode(NodeBase):
 # ---------- Discriminated Union ----------
 
 NodeUnion = Annotated[
-    Resource | Generator | NestedGenerator | Upgrade | PrestigeLayer
-    | SacrificeNode | Achievement | Manager | Converter
-    | ProbabilityNode | EndCondition | UnlockGate | ChoiceGroup
-    | Register | Gate | Queue
-    | TickspeedNode | AutobuyerNode | DrainNode | BuffNode | SynergyNode,
+    Resource
+    | Generator
+    | NestedGenerator
+    | Upgrade
+    | PrestigeLayer
+    | SacrificeNode
+    | Achievement
+    | Manager
+    | Converter
+    | ProbabilityNode
+    | EndCondition
+    | UnlockGate
+    | ChoiceGroup
+    | Register
+    | Gate
+    | Queue
+    | TickspeedNode
+    | AutobuyerNode
+    | DrainNode
+    | BuffNode
+    | SynergyNode,
     Field(discriminator="type"),
 ]

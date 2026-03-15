@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from idleframework.dsl.compiler import compile_formula, evaluate_formula
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 @dataclass
 class PropertyModification:
     """A resolved modification to a node property."""
+
     value: float
     mode: str  # "set", "add", "multiply"
 
@@ -99,13 +100,17 @@ def _topological_sort_edges(edges, game):
     edge_targets = {}
     for e in edges:
         sid = sanitize_var_name(e.target)
-        edge_targets[e.id] = {f"owned_{sid}", f"balance_{sid}", f"level_{sid}",
-                              f"total_production_{sid}", f"lifetime_{sid}"}
+        edge_targets[e.id] = {
+            f"owned_{sid}",
+            f"balance_{sid}",
+            f"level_{sid}",
+            f"total_production_{sid}",
+            f"lifetime_{sid}",
+        }
 
     # Build adjacency: edge A depends on edge B if A's formula contains
     # any variable that B's target produces
     deps = defaultdict(set)  # edge_id -> set of edge_ids it depends on
-    edge_map = {e.id: e for e in edges}
 
     for e in edges:
         if not e.formula:
@@ -114,7 +119,7 @@ def _topological_sort_edges(edges, game):
             if other.id == e.id:
                 continue
             for var in edge_targets.get(other.id, set()):
-                if re.search(rf'\b{re.escape(var)}\b', e.formula):
+                if re.search(rf"\b{re.escape(var)}\b", e.formula):
                     deps[e.id].add(other.id)
 
     # Kahn's algorithm

@@ -175,9 +175,7 @@ class TestGeneratorChain:
     def test_with_initial_counts(self):
         # With initial counts, production should be higher
         result_no_init = generator_chain_production(10.0, [1.0, 1.0])
-        result_with_init = generator_chain_production(
-            10.0, [1.0, 1.0], initial_counts=[5, 5]
-        )
+        result_with_init = generator_chain_production(10.0, [1.0, 1.0], initial_counts=[5, 5])
         assert result_with_init > result_no_init
 
     def test_single_tier_with_higher_rate(self):

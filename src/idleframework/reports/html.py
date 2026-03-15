@@ -1,4 +1,5 @@
 """HTML report generator using Plotly for idle game analysis results."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -50,12 +51,14 @@ def _build_production_chart(timeline: list[dict]) -> go.Figure:
     rates = [entry["production_rate"] for entry in timeline]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times,
-        y=rates,
-        mode="lines+markers",
-        name="Production Rate",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=times,
+            y=rates,
+            mode="lines+markers",
+            name="Production Rate",
+        )
+    )
     fig.update_layout(
         title="Production Rate Over Time",
         xaxis_title="Time (s)",
@@ -73,11 +76,13 @@ def _build_purchase_cost_chart(purchases: list) -> go.Figure:
     costs = [cost_by_node[n] for n in nodes]
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=nodes,
-        y=costs,
-        name="Total Cost",
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=nodes,
+            y=costs,
+            name="Total Cost",
+        )
+    )
     fig.update_layout(
         title="Purchase Cost Distribution",
         xaxis_title="Node",
@@ -98,11 +103,13 @@ def _build_generator_count_chart(purchases: list) -> go.Figure | None:
     counts = [count_by_node[n] for n in nodes]
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=nodes,
-        y=counts,
-        name="Purchase Count",
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=nodes,
+            y=counts,
+            name="Purchase Count",
+        )
+    )
     fig.update_layout(
         title="Generator Purchase Breakdown",
         xaxis_title="Node",
@@ -130,19 +137,14 @@ def _build_summary(report: AnalysisReport) -> str:
         parts.append(f"<p><strong>Dead upgrades found:</strong> {len(report.dead_upgrades)}</p>")
         parts.append("<ul>")
         for du in report.dead_upgrades:
-            parts.append(
-                f"<li>{escape(du['upgrade_id'])}: "
-                f"{escape(du.get('reason', 'N/A'))}</li>"
-            )
+            parts.append(f"<li>{escape(du['upgrade_id'])}: {escape(du.get('reason', 'N/A'))}</li>")
         parts.append("</ul>")
     else:
         parts.append("<p><strong>Dead upgrades:</strong> None detected</p>")
 
     if report.progression_walls:
         wall_count = len(report.progression_walls)
-        parts.append(
-            f"<p><strong>Progression walls found:</strong> {wall_count}</p>"
-        )
+        parts.append(f"<p><strong>Progression walls found:</strong> {wall_count}</p>")
         parts.append("<ul>")
         for pw in report.progression_walls:
             parts.append(f"<li>{escape(pw.get('reason', 'N/A'))}</li>")

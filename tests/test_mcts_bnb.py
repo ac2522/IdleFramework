@@ -1,4 +1,5 @@
 """Tests for MCTS and Branch-and-Bound optimizers."""
+
 import itertools
 import json
 from pathlib import Path
@@ -19,12 +20,24 @@ def _make_two_gen_game():
         name="TwoGenTest",
         nodes=[
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "cheap", "type": "generator", "name": "Cheap",
-             "base_production": 1.0, "cost_base": 10.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
-            {"id": "expensive", "type": "generator", "name": "Expensive",
-             "base_production": 50.0, "cost_base": 500.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
+            {
+                "id": "cheap",
+                "type": "generator",
+                "name": "Cheap",
+                "base_production": 1.0,
+                "cost_base": 10.0,
+                "cost_growth_rate": 1.15,
+                "cycle_time": 1.0,
+            },
+            {
+                "id": "expensive",
+                "type": "generator",
+                "name": "Expensive",
+                "base_production": 50.0,
+                "cost_base": 500.0,
+                "cost_growth_rate": 1.15,
+                "cycle_time": 1.0,
+            },
         ],
         edges=[
             {"id": "e1", "source": "cheap", "target": "cash", "edge_type": "production_target"},
@@ -40,15 +53,33 @@ def _make_three_candidate_game():
         name="ThreeCandidateTest",
         nodes=[
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "gen_a", "type": "generator", "name": "Gen A",
-             "base_production": 1.0, "cost_base": 5.0, "cost_growth_rate": 1.1,
-             "cycle_time": 1.0},
-            {"id": "gen_b", "type": "generator", "name": "Gen B",
-             "base_production": 3.0, "cost_base": 20.0, "cost_growth_rate": 1.1,
-             "cycle_time": 1.0},
-            {"id": "gen_c", "type": "generator", "name": "Gen C",
-             "base_production": 10.0, "cost_base": 100.0, "cost_growth_rate": 1.1,
-             "cycle_time": 1.0},
+            {
+                "id": "gen_a",
+                "type": "generator",
+                "name": "Gen A",
+                "base_production": 1.0,
+                "cost_base": 5.0,
+                "cost_growth_rate": 1.1,
+                "cycle_time": 1.0,
+            },
+            {
+                "id": "gen_b",
+                "type": "generator",
+                "name": "Gen B",
+                "base_production": 3.0,
+                "cost_base": 20.0,
+                "cost_growth_rate": 1.1,
+                "cycle_time": 1.0,
+            },
+            {
+                "id": "gen_c",
+                "type": "generator",
+                "name": "Gen C",
+                "base_production": 10.0,
+                "cost_base": 100.0,
+                "cost_growth_rate": 1.1,
+                "cycle_time": 1.0,
+            },
         ],
         edges=[
             {"id": "e1", "source": "gen_a", "target": "cash", "edge_type": "production_target"},
@@ -69,6 +100,7 @@ def _load_minicap():
 # ---------------------------------------------------------------------------
 # MCTS tests
 # ---------------------------------------------------------------------------
+
 
 class TestMCTS:
     def test_mcts_epsilon_greedy_rollouts(self):
@@ -151,6 +183,7 @@ class TestMCTS:
 # ---------------------------------------------------------------------------
 # Branch-and-Bound tests
 # ---------------------------------------------------------------------------
+
 
 class TestBranchAndBound:
     def test_bnb_small_problem_optimal(self):

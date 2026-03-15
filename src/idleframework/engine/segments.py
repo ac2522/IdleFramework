@@ -9,6 +9,7 @@ segment.
 
 from __future__ import annotations
 
+import contextlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -18,8 +19,19 @@ from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
 from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
-from idleframework.engine.state_edges import evaluate_state_edges, apply_property_modifications
-from idleframework.model.nodes import AutobuyerNode, BuffNode, DrainNode, Generator, PrestigeLayer, Register, Resource, SynergyNode, TickspeedNode, Upgrade
+from idleframework.engine.state_edges import apply_property_modifications, evaluate_state_edges
+from idleframework.model.nodes import (
+    AutobuyerNode,
+    BuffNode,
+    DrainNode,
+    Generator,
+    PrestigeLayer,
+    Register,
+    Resource,
+    SynergyNode,
+    TickspeedNode,
+    Upgrade,
+)
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -44,6 +56,7 @@ class Segment:
 @dataclass
 class BuffMultipliers:
     """Resolved buff multipliers for production calculation."""
+
     global_multiplier: float = 1.0
     per_generator: dict[str, float] = field(default_factory=dict)
 
@@ -63,6 +76,7 @@ class PiecewiseEngine:
     ):
         if validate:
             from idleframework.graph.validation import validate_graph
+
             errors = validate_graph(game)
             if errors:
                 raise ValueError(f"Graph validation errors: {errors}")
@@ -187,7 +201,9 @@ class PiecewiseEngine:
                 )
             buff_mult = buffs.global_multiplier * buffs.per_generator.get(node.id, 1.0)
             syn_mult = synergies.get(node.id, 1.0)
-            rate = base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult * syn_mult
+            rate = (
+                base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult * syn_mult
+            )
 
             # Find which resource(s) this generator produces to
             for edge in self._game.get_edges_from(node.id):
@@ -421,6 +437,7 @@ class PiecewiseEngine:
         if ab.condition is not None:
             from idleframework.dsl.compiler import compile_formula, evaluate_formula
             from idleframework.engine.variables import build_state_variables
+
             variables = build_state_variables(self._game, self._state)
             compiled = compile_formula(ab.condition)
             if not float(evaluate_formula(compiled, variables)):
@@ -435,10 +452,8 @@ class PiecewiseEngine:
             amount = self._compute_max_affordable(ab.target)
 
         if amount > 0:
-            try:
+            with contextlib.suppress(ValueError):
                 self.purchase(ab.target, amount)
-            except ValueError:
-                pass  # Can't afford — skip
 
         ns.last_fired = self._time
 
@@ -691,8 +706,7 @@ class PiecewiseEngine:
                 tol = max(1e-4, abs(cost) * 1e-9)
                 if balance < cost - tol:
                     raise ValueError(
-                        f"Cannot afford upgrade {node_id!r}: "
-                        f"need {cost:.2f}, have {balance:.2f}"
+                        f"Cannot afford upgrade {node_id!r}: need {cost:.2f}, have {balance:.2f}"
                     )
                 if balance < cost:
                     self._state.get(currency_id).current_value = 0.0
@@ -882,10 +896,11 @@ class PiecewiseEngine:
                 ab_id, ab_time = next_ab
 
             # Check if autobuyer fires before purchase and before target
-            ab_fires_first = False
-            if ab_time is not None and ab_time < target_time - 1e-12:
-                if purchase_time is None or ab_time < purchase_time:
-                    ab_fires_first = True
+            ab_fires_first = (
+                ab_time is not None
+                and ab_time < target_time - 1e-12
+                and (purchase_time is None or ab_time < purchase_time)
+            )
 
             if ab_fires_first:
                 # Advance to autobuyer fire time
@@ -1015,10 +1030,14 @@ class PiecewiseEngine:
         if node_id in self._generators:
             gen = self._generators[node_id]
             ns = self._state.get(node_id)
-            cost = float(bulk_purchase_cost(
-                BigFloat(gen.cost_base), BigFloat(gen.cost_growth_rate),
-                ns.owned, 1,
-            ))
+            cost = float(
+                bulk_purchase_cost(
+                    BigFloat(gen.cost_base),
+                    BigFloat(gen.cost_growth_rate),
+                    ns.owned,
+                    1,
+                )
+            )
         elif node_id in self._upgrades:
             cost = self._upgrades[node_id].cost
         else:

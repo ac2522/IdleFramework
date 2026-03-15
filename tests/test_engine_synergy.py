@@ -1,20 +1,33 @@
 """Tests for synergy evaluation in PiecewiseEngine."""
+
 import pytest
-from idleframework.model.nodes import Resource, Generator, SynergyNode
+
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.model.edges import Edge
 from idleframework.model.game import GameDefinition
+from idleframework.model.nodes import Generator, Resource, SynergyNode
 from idleframework.model.state import GameState
-from idleframework.engine.segments import PiecewiseEngine
 
 
 def test_synergy_boosts_target():
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
-            Generator(id="cursor", name="Cursor", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
-            Generator(id="grandma", name="Grandma", base_production=5.0, cost_base=100, cost_growth_rate=1.15),
-            SynergyNode(id="syn1", sources=["cursor"], formula_expr="owned_cursor * 0.01", target="grandma"),
+            Generator(
+                id="cursor", name="Cursor", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
+            Generator(
+                id="grandma",
+                name="Grandma",
+                base_production=5.0,
+                cost_base=100,
+                cost_growth_rate=1.15,
+            ),
+            SynergyNode(
+                id="syn1", sources=["cursor"], formula_expr="owned_cursor * 0.01", target="grandma"
+            ),
         ],
         edges=[
             Edge(id="e1", source="cursor", target="gold", edge_type="production_target"),
@@ -41,10 +54,13 @@ def test_synergy_boosts_target():
 
 def test_no_synergy_no_change():
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
-            Generator(id="gen1", name="Miner", base_production=10.0, cost_base=100, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=10.0, cost_base=100, cost_growth_rate=1.15
+            ),
         ],
         edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
         stacking_groups={},
@@ -61,12 +77,23 @@ def test_no_synergy_no_change():
 def test_synergy_scales_with_source():
     """More sources owned = bigger synergy bonus."""
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
-            Generator(id="cursor", name="Cursor", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
-            Generator(id="grandma", name="Grandma", base_production=10.0, cost_base=100, cost_growth_rate=1.15),
-            SynergyNode(id="syn1", sources=["cursor"], formula_expr="owned_cursor * 0.1", target="grandma"),
+            Generator(
+                id="cursor", name="Cursor", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
+            Generator(
+                id="grandma",
+                name="Grandma",
+                base_production=10.0,
+                cost_base=100,
+                cost_growth_rate=1.15,
+            ),
+            SynergyNode(
+                id="syn1", sources=["cursor"], formula_expr="owned_cursor * 0.1", target="grandma"
+            ),
         ],
         edges=[
             Edge(id="e1", source="cursor", target="gold", edge_type="production_target"),

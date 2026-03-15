@@ -1,4 +1,5 @@
 """End-to-end integration tests for the IdleFramework API."""
+
 import pytest
 
 # -- Minimal game JSON for upload tests --
@@ -60,7 +61,8 @@ class TestPlaySessionFlow:
         assert resp.status_code == 200
         data = resp.json()
         assert data["elapsed_time"] == pytest.approx(
-            30.0, abs=0.5,
+            30.0,
+            abs=0.5,
         )
         first_resource = list(
             data["resources"].values(),
@@ -83,9 +85,7 @@ class TestPlaySessionFlow:
             json={"seconds": 10.0},
         )
         assert resp.status_code == 200
-        assert resp.json()["elapsed_time"] == (
-            pytest.approx(40.0, abs=0.5)
-        )
+        assert resp.json()["elapsed_time"] == (pytest.approx(40.0, abs=0.5))
 
         # 5. Run auto-optimize
         resp = client.post(
@@ -154,21 +154,18 @@ class TestGameUploadAndAnalyze:
     def test_game_upload_and_analyze(self, client):
         # 1. Upload a new game
         resp = client.post(
-            "/api/v1/games/", json=UPLOAD_GAME,
+            "/api/v1/games/",
+            json=UPLOAD_GAME,
         )
         assert resp.status_code == 201
         create_data = resp.json()
         game_id = create_data["id"]
-        assert create_data["name"] == (
-            "Integration Test Game"
-        )
+        assert create_data["name"] == ("Integration Test Game")
 
         # Verify it appears in the game list
         resp = client.get("/api/v1/games/")
         assert resp.status_code == 200
-        game_ids = [
-            g["id"] for g in resp.json()["games"]
-        ]
+        game_ids = [g["id"] for g in resp.json()["games"]]
         assert game_id in game_ids
 
         # 2. Run analysis on the uploaded game
@@ -181,9 +178,7 @@ class TestGameUploadAndAnalyze:
         )
         assert resp.status_code == 200
         analysis = resp.json()
-        assert analysis["game_name"] == (
-            "Integration Test Game"
-        )
+        assert analysis["game_name"] == ("Integration Test Game")
 
         # 3. Delete the uploaded game
         resp = client.delete(

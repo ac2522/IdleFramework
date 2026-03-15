@@ -125,14 +125,9 @@ class GreedyOptimizer:
                     tns = self.engine.state.get(node.target)
                     if tns.owned <= 0:
                         return 0.0
-                    gen_mult = self.engine._compute_generator_multipliers().get(
-                        node.target, 1.0
-                    )
+                    gen_mult = self.engine._compute_generator_multipliers().get(node.target, 1.0)
                     current_prod = (
-                        target_node.base_production
-                        * tns.owned
-                        / target_node.cycle_time
-                        * gen_mult
+                        target_node.base_production * tns.owned / target_node.cycle_time * gen_mult
                     )
                 else:
                     return 0.0
@@ -312,13 +307,15 @@ class GreedyOptimizer:
                 gen_mult = gen_multipliers.get(node.id, 1.0)
                 delta_prod = node.base_production / node.cycle_time * gen_mult
                 eff = delta_prod / cost
-                candidates.append({
-                    "node_id": node.id,
-                    "type": "generator",
-                    "cost": cost,
-                    "efficiency": eff,
-                    "delta_production": delta_prod,
-                })
+                candidates.append(
+                    {
+                        "node_id": node.id,
+                        "type": "generator",
+                        "cost": cost,
+                        "efficiency": eff,
+                        "delta_production": delta_prod,
+                    }
+                )
 
             elif isinstance(node, Upgrade):
                 ns = self.engine.state.get(node.id)
@@ -329,18 +326,20 @@ class GreedyOptimizer:
                     cost = 0.0
                 eff = self.compute_upgrade_efficiency(node.id)
                 delta_prod = self.engine._estimate_upgrade_delta(node, gen_multipliers)
-                candidates.append({
-                    "node_id": node.id,
-                    "type": "upgrade",
-                    "cost": cost,
-                    "efficiency": eff,
-                    "delta_production": delta_prod,
-                })
+                candidates.append(
+                    {
+                        "node_id": node.id,
+                        "type": "upgrade",
+                        "cost": cost,
+                        "efficiency": eff,
+                        "delta_production": delta_prod,
+                    }
+                )
 
         # Add prestige candidates
-        from idleframework.model.nodes import PrestigeLayer
         from idleframework.dsl.compiler import compile_formula, evaluate_formula
         from idleframework.engine.variables import build_state_variables
+        from idleframework.model.nodes import PrestigeLayer
 
         variables = build_state_variables(self.game, self.engine.state)
         for node in self.game.nodes:
@@ -352,13 +351,15 @@ class GreedyOptimizer:
                 continue
             run_time = self.engine.state.elapsed_time or 1.0
             eff = gain / run_time
-            candidates.append({
-                "node_id": node.id,
-                "type": "prestige",
-                "cost": 0.0,
-                "efficiency": eff,
-                "delta_production": 0.0,
-            })
+            candidates.append(
+                {
+                    "node_id": node.id,
+                    "type": "prestige",
+                    "cost": 0.0,
+                    "efficiency": eff,
+                    "delta_production": 0.0,
+                }
+            )
 
         return candidates
 
@@ -381,33 +382,26 @@ class GreedyOptimizer:
         pay_resource = self.engine._get_primary_resource_id()
 
         for step in steps:
-            purchases.append(PurchaseEvent(
-                time=step.time,
-                node_id=step.node_id,
-                count=1,
-                cost=step.cost,
-            ))
-            prod_rate = (
-                self.engine.get_production_rate(pay_resource)
-                if pay_resource
-                else 0.0
+            purchases.append(
+                PurchaseEvent(
+                    time=step.time,
+                    node_id=step.node_id,
+                    count=1,
+                    cost=step.cost,
+                )
             )
-            timeline.append({
-                "time": step.time,
-                "production_rate": prod_rate,
-            })
+            prod_rate = self.engine.get_production_rate(pay_resource) if pay_resource else 0.0
+            timeline.append(
+                {
+                    "time": step.time,
+                    "production_rate": prod_rate,
+                }
+            )
 
-        final_prod = (
-            self.engine.get_production_rate(pay_resource)
-            if pay_resource
-            else 0.0
-        )
-        final_bal = (
-            self.engine.get_balance(pay_resource)
-            if pay_resource
-            else 0.0
-        )
-        from idleframework.model.nodes import BuffNode, ProbabilityNode, PrestigeLayer
+        final_prod = self.engine.get_production_rate(pay_resource) if pay_resource else 0.0
+        final_bal = self.engine.get_balance(pay_resource) if pay_resource else 0.0
+        from idleframework.model.nodes import BuffNode, PrestigeLayer, ProbabilityNode
+
         has_buffs = any(isinstance(n, BuffNode) for n in self.game.nodes)
         has_crit = any(isinstance(n, ProbabilityNode) for n in self.game.nodes)
         has_prestige = any(isinstance(n, PrestigeLayer) for n in self.game.nodes)

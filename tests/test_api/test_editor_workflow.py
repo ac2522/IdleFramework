@@ -100,10 +100,13 @@ class TestCreateAndAnalyze:
         game_id = resp.json()["id"]
 
         # Analyze
-        resp = client.post("/api/v1/analysis/run", json={
-            "game_id": game_id,
-            "simulation_time": 60.0,
-        })
+        resp = client.post(
+            "/api/v1/analysis/run",
+            json={
+                "game_id": game_id,
+                "simulation_time": 60.0,
+            },
+        )
         assert resp.status_code == 200
         analysis = resp.json()
         assert "dead_upgrades" in analysis

@@ -3,6 +3,7 @@
 Maintains top-K engine states at each step, exploring multiple purchase
 paths in parallel.
 """
+
 from __future__ import annotations
 
 import copy
@@ -26,15 +27,19 @@ class BeamSearchOptimizer:
     ) -> OptimizeResult:
         pay_resource = self._engine._get_primary_resource_id()
 
-        initial_timeline = [{
-            "time": self._engine.time,
-            "production_rate": self._engine.get_production_rate(pay_resource),
-        }]
-        beam = [(
-            copy.deepcopy(self._engine),
-            [],
-            list(initial_timeline),
-        )]
+        initial_timeline = [
+            {
+                "time": self._engine.time,
+                "production_rate": self._engine.get_production_rate(pay_resource),
+            }
+        ]
+        beam = [
+            (
+                copy.deepcopy(self._engine),
+                [],
+                list(initial_timeline),
+            )
+        ]
 
         for _step in range(max_steps):
             expansions = []
@@ -56,7 +61,7 @@ class BeamSearchOptimizer:
                     continue
 
                 candidates.sort(key=lambda c: (-c["efficiency"], c["cost"]))
-                candidates = candidates[:self._beam_width]
+                candidates = candidates[: self._beam_width]
 
                 expanded_any = False
                 for candidate in candidates:
@@ -96,16 +101,20 @@ class BeamSearchOptimizer:
                         # so the candidate may no longer be valid. Skip this branch.
                         continue
 
-                    branch_purchases.append(PurchaseEvent(
-                        time=branch_engine.time,
-                        node_id=node_id,
-                        count=1,
-                        cost=actual_cost,
-                    ))
-                    branch_timeline.append({
-                        "time": branch_engine.time,
-                        "production_rate": branch_engine.get_production_rate(pay_resource),
-                    })
+                    branch_purchases.append(
+                        PurchaseEvent(
+                            time=branch_engine.time,
+                            node_id=node_id,
+                            count=1,
+                            cost=actual_cost,
+                        )
+                    )
+                    branch_timeline.append(
+                        {
+                            "time": branch_engine.time,
+                            "production_rate": branch_engine.get_production_rate(pay_resource),
+                        }
+                    )
 
                     expansions.append((branch_engine, branch_purchases, branch_timeline))
                     expanded_any = True
@@ -120,7 +129,7 @@ class BeamSearchOptimizer:
                 key=lambda x: x[0].get_production_rate(x[0]._get_primary_resource_id()),
                 reverse=True,
             )
-            beam = expansions[:self._beam_width]
+            beam = expansions[: self._beam_width]
 
             if all(e.time >= target_time for e, _, _ in beam):
                 break

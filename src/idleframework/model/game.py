@@ -63,27 +63,19 @@ class GameDefinition(BaseModel):
         for edge in self.edges:
             if edge.source not in node_ids:
                 raise ValueError(
-                    f"Edge {edge.id!r}: source {edge.source!r} does not "
-                    f"reference an existing node"
+                    f"Edge {edge.id!r}: source {edge.source!r} does not reference an existing node"
                 )
             if edge.target not in node_ids:
                 raise ValueError(
-                    f"Edge {edge.id!r}: target {edge.target!r} does not "
-                    f"reference an existing node"
+                    f"Edge {edge.id!r}: target {edge.target!r} does not reference an existing node"
                 )
             if edge.edge_type == "state_modifier" and not edge.formula:
-                raise ValueError(
-                    f"Edge {edge.id!r}: state_modifier edge must have a formula"
-                )
+                raise ValueError(f"Edge {edge.id!r}: state_modifier edge must have a formula")
 
     def _validate_upgrade_targets(self) -> None:
         node_ids = {n.id for n in self.nodes}
         for node in self.nodes:
-            if (
-                isinstance(node, Upgrade)
-                and node.target != "_all"
-                and node.target not in node_ids
-            ):
+            if isinstance(node, Upgrade) and node.target != "_all" and node.target not in node_ids:
                 raise ValueError(
                     f"Target {node.target!r} on upgrade {node.id!r} "
                     f"does not reference a valid node ID"
@@ -107,16 +99,12 @@ class GameDefinition(BaseModel):
                 try:
                     compile_formula(node.formula_expr)
                 except Exception as e:
-                    raise ValueError(
-                        f"Formula validation failed on node {node.id!r}: {e}"
-                    ) from e
+                    raise ValueError(f"Formula validation failed on node {node.id!r}: {e}") from e
             if isinstance(node, SynergyNode):
                 try:
                     compile_formula(node.formula_expr)
                 except Exception as e:
-                    raise ValueError(
-                        f"Formula validation failed on node {node.id!r}: {e}"
-                    ) from e
+                    raise ValueError(f"Formula validation failed on node {node.id!r}: {e}") from e
 
         # Validate formula on state_modifier edges
         for edge in self.edges:
@@ -124,9 +112,7 @@ class GameDefinition(BaseModel):
                 try:
                     compile_formula(edge.formula)
                 except Exception as e:
-                    raise ValueError(
-                        f"Formula validation failed on edge {edge.id!r}: {e}"
-                    ) from e
+                    raise ValueError(f"Formula validation failed on edge {edge.id!r}: {e}") from e
 
     def _validate_tickspeed_singleton(self) -> None:
         ts_count = sum(1 for n in self.nodes if isinstance(n, TickspeedNode))
@@ -144,9 +130,7 @@ class GameDefinition(BaseModel):
             if origin is typing.Union:
                 # float | None, Optional[float], etc.
                 return any(
-                    _is_numeric_type(a)
-                    for a in typing.get_args(annotation)
-                    if a is not type(None)
+                    _is_numeric_type(a) for a in typing.get_args(annotation) if a is not type(None)
                 )
             # Handle types.UnionType (Python 3.10+ X | Y syntax)
             if hasattr(annotation, "__args__"):
@@ -154,9 +138,7 @@ class GameDefinition(BaseModel):
                 if origin_check is None and hasattr(annotation, "__args__"):
                     # types.UnionType (e.g., float | None)
                     return any(
-                        _is_numeric_type(a)
-                        for a in annotation.__args__
-                        if a is not type(None)
+                        _is_numeric_type(a) for a in annotation.__args__ if a is not type(None)
                     )
             return False
 

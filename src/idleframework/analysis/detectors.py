@@ -1,4 +1,5 @@
 """Balance analysis detectors for idle game definitions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -37,7 +38,8 @@ def _run_greedy(
         cost = bulk_cost(
             engine._generators[gen_id].cost_base,
             engine._generators[gen_id].cost_growth_rate,
-            0, 1,
+            0,
+            1,
         )
         if cost <= initial_balance:
             engine.purchase(gen_id, 1)
@@ -67,7 +69,8 @@ def _run_optimizer(
         cost = bulk_cost(
             engine._generators[gen_id].cost_base,
             engine._generators[gen_id].cost_growth_rate,
-            0, 1,
+            0,
+            1,
         )
         if cost <= initial_balance:
             engine.purchase(gen_id, 1)
@@ -101,23 +104,29 @@ def detect_dead_upgrades(
         if upg.cost <= 0:
             continue
         if upg.cost > max_earnings * 10:
-            dead.append({
-                "upgrade_id": upg_id,
-                "cost": upg.cost,
-                "max_earnings": max_earnings,
-                "reason": f"Cost ({upg.cost:.2e}) exceeds 10x total earnings ({max_earnings:.2e})",
-            })
+            dead.append(
+                {
+                    "upgrade_id": upg_id,
+                    "cost": upg.cost,
+                    "max_earnings": max_earnings,
+                    "reason": (
+                        f"Cost ({upg.cost:.2e}) exceeds "
+                        f"10x total earnings ({max_earnings:.2e})"
+                    ),
+                }
+            )
             continue
         if upg.magnitude is not None and upg.magnitude < 1.01 and upg.cost > max_earnings * 0.1:
-            dead.append({
-                "upgrade_id": upg_id,
-                "cost": upg.cost,
-                "magnitude": upg.magnitude,
-                "reason": (
-                    f"Negligible magnitude ({upg.magnitude:.4f})"
-                    f" for high cost ({upg.cost:.2e})"
-                ),
-            })
+            dead.append(
+                {
+                    "upgrade_id": upg_id,
+                    "cost": upg.cost,
+                    "magnitude": upg.magnitude,
+                    "reason": (
+                        f"Negligible magnitude ({upg.magnitude:.4f}) for high cost ({upg.cost:.2e})"
+                    ),
+                }
+            )
 
     return dead
 
@@ -136,7 +145,8 @@ def detect_progression_walls(
         cost = bulk_cost(
             engine._generators[gen_id].cost_base,
             engine._generators[gen_id].cost_growth_rate,
-            0, 1,
+            0,
+            1,
         )
         if cost <= 50.0:
             engine.purchase(gen_id, 1)
@@ -150,15 +160,17 @@ def detect_progression_walls(
     for node in game.nodes:
         if node.type == "generator" and node.cost_growth_rate >= 1.30:
             severity = "severe" if node.cost_growth_rate >= 1.40 else "moderate"
-            walls.append({
-                "generator_id": node.id,
-                "cost_growth_rate": node.cost_growth_rate,
-                "severity": severity,
-                "reason": (
-                    f"Generator '{node.id}' has high cost growth"
-                    f" rate ({node.cost_growth_rate:.2f})"
-                ),
-            })
+            walls.append(
+                {
+                    "generator_id": node.id,
+                    "cost_growth_rate": node.cost_growth_rate,
+                    "severity": severity,
+                    "reason": (
+                        f"Generator '{node.id}' has high cost growth"
+                        f" rate ({node.cost_growth_rate:.2f})"
+                    ),
+                }
+            )
 
     if len(result.timeline) >= 3:
         for i in range(2, len(result.timeline)):
@@ -176,15 +188,17 @@ def detect_progression_walls(
             if time_gap > simulation_time * 0.2 and growth_factor < 1.5:
                 wall_gen = _identify_wall_generator(game)
                 severity = "severe" if time_gap > simulation_time * 0.4 else "moderate"
-                walls.append({
-                    "time_start": prev_time,
-                    "time_end": curr_time,
-                    "duration": time_gap,
-                    "growth_factor": growth_factor,
-                    "severity": severity,
-                    "generator_id": wall_gen,
-                    "reason": f"Production stagnated for {time_gap:.1f}s ({severity})",
-                })
+                walls.append(
+                    {
+                        "time_start": prev_time,
+                        "time_end": curr_time,
+                        "duration": time_gap,
+                        "growth_factor": growth_factor,
+                        "severity": severity,
+                        "generator_id": wall_gen,
+                        "reason": f"Production stagnated for {time_gap:.1f}s ({severity})",
+                    }
+                )
 
     return walls
 
@@ -194,8 +208,8 @@ def _identify_wall_generator(game: GameDefinition) -> str | None:
     worst_growth = 0.0
     for node in game.nodes:
         if node.type == "generator" and node.cost_growth_rate > worst_growth:
-                worst_growth = node.cost_growth_rate
-                worst_gen = node.id
+            worst_growth = node.cost_growth_rate
+            worst_gen = node.id
     return worst_gen
 
 
@@ -275,11 +289,13 @@ def run_sensitivity_analysis(
         perturbed = _perturb_game(game, parameter, pct)
         opt_result = _run_greedy(perturbed, simulation_time)
 
-        results.append({
-            "perturbation_pct": pct,
-            "final_production": opt_result.final_production,
-            "final_balance": opt_result.final_balance,
-        })
+        results.append(
+            {
+                "perturbation_pct": pct,
+                "final_production": opt_result.final_production,
+                "final_balance": opt_result.final_balance,
+            }
+        )
 
     return results
 
@@ -314,7 +330,8 @@ def run_full_analysis(
     report.progression_walls = detect_progression_walls(game, simulation_time)
     report.dominant_strategy = detect_dominant_strategy(game, simulation_time)
     report.optimizer_result = _run_optimizer(
-        game, simulation_time,
+        game,
+        simulation_time,
         optimizer=optimizer,
         beam_width=beam_width,
         mcts_iterations=mcts_iterations,

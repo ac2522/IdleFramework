@@ -2,6 +2,7 @@
 
 Uses epsilon-greedy rollout policy with UCB1 tree selection and average backup.
 """
+
 from __future__ import annotations
 
 import copy
@@ -158,10 +159,7 @@ class MCTSOptimizer:
                 if not sim_candidates:
                     break
 
-                unexplored = [
-                    c for c in sim_candidates
-                    if c["node_id"] not in node.children
-                ]
+                unexplored = [c for c in sim_candidates if c["node_id"] not in node.children]
                 if unexplored:
                     chosen = self._rng.choice(unexplored)
                     child = _MCTSNode(node_id=chosen["node_id"], parent=node)

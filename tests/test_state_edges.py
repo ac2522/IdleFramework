@@ -1,29 +1,38 @@
 """Tests for state edge evaluation engine."""
+
 import pytest
-from idleframework.model.nodes import Resource, Generator
+
+from idleframework.engine.state_edges import (
+    PropertyModification,
+    apply_property_modifications,
+    evaluate_state_edges,
+)
 from idleframework.model.edges import Edge
 from idleframework.model.game import GameDefinition
+from idleframework.model.nodes import Generator, Resource
 from idleframework.model.state import GameState, NodeState
-from idleframework.engine.state_edges import (
-    evaluate_state_edges,
-    apply_property_modifications,
-    PropertyModification,
-)
 
 
 def _make_game_with_state_edge(formula, target_property, modifier_mode):
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", initial_value=100.0),
-            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
             Edge(
-                id="sm1", source="gold", target="gen1",
-                edge_type="state_modifier", formula=formula,
-                target_property=target_property, modifier_mode=modifier_mode,
+                id="sm1",
+                source="gold",
+                target="gen1",
+                edge_type="state_modifier",
+                formula=formula,
+                target_property=target_property,
+                modifier_mode=modifier_mode,
             ),
         ],
         stacking_groups={},
@@ -97,10 +106,13 @@ def test_apply_property_modifications_all_modes():
 def test_backward_compat_no_target_property():
     """State modifier without target_property uses _general_multiplier key."""
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", initial_value=100.0),
-            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
@@ -121,10 +133,13 @@ def test_general_multiplier_affects_production():
     from idleframework.engine.segments import PiecewiseEngine
 
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", initial_value=0.0),
-            Generator(id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
@@ -147,21 +162,45 @@ def test_topological_sort_no_false_positive_on_prefix():
     from idleframework.engine.state_edges import _topological_sort_edges
 
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
-            Generator(id="gen", name="Gen", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
-            Generator(id="general", name="General", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen", name="Gen", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
+            Generator(
+                id="general",
+                name="General",
+                base_production=1.0,
+                cost_base=10,
+                cost_growth_rate=1.15,
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen", target="gold", edge_type="production_target"),
             Edge(id="e2", source="general", target="gold", edge_type="production_target"),
             # sm1 targets "gen", sm2 targets "general"
-            # sm2's formula uses "owned_general" which should NOT create a dependency on sm1 (which produces owned_gen)
-            Edge(id="sm1", source="gold", target="gen", edge_type="state_modifier",
-                 formula="2.0", target_property="base_production", modifier_mode="multiply"),
-            Edge(id="sm2", source="gold", target="general", edge_type="state_modifier",
-                 formula="owned_general * 1.5", target_property="base_production", modifier_mode="multiply"),
+            # sm2's formula uses "owned_general" — should NOT depend on
+            # sm1 (which produces owned_gen, a different variable)
+            Edge(
+                id="sm1",
+                source="gold",
+                target="gen",
+                edge_type="state_modifier",
+                formula="2.0",
+                target_property="base_production",
+                modifier_mode="multiply",
+            ),
+            Edge(
+                id="sm2",
+                source="gold",
+                target="general",
+                edge_type="state_modifier",
+                formula="owned_general * 1.5",
+                target_property="base_production",
+                modifier_mode="multiply",
+            ),
         ],
         stacking_groups={},
     )
@@ -182,21 +221,40 @@ def test_topological_sort_cycle_detection():
     from idleframework.engine.state_edges import _topological_sort_edges
 
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
-            Generator(id="gen1", name="Gen1", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
-            Generator(id="gen2", name="Gen2", base_production=1.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Gen1", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
+            Generator(
+                id="gen2", name="Gen2", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
         ],
         edges=[
             Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
             Edge(id="e2", source="gen2", target="gold", edge_type="production_target"),
             # sm1 targets gen1, formula references gen2 vars -> depends on sm2
-            Edge(id="sm1", source="gold", target="gen1", edge_type="state_modifier",
-                 formula="owned_gen2 * 2", target_property="base_production", modifier_mode="multiply"),
+            Edge(
+                id="sm1",
+                source="gold",
+                target="gen1",
+                edge_type="state_modifier",
+                formula="owned_gen2 * 2",
+                target_property="base_production",
+                modifier_mode="multiply",
+            ),
             # sm2 targets gen2, formula references gen1 vars -> depends on sm1 -> CYCLE
-            Edge(id="sm2", source="gold", target="gen2", edge_type="state_modifier",
-                 formula="owned_gen1 * 3", target_property="base_production", modifier_mode="multiply"),
+            Edge(
+                id="sm2",
+                source="gold",
+                target="gen2",
+                edge_type="state_modifier",
+                formula="owned_gen1 * 3",
+                target_property="base_production",
+                modifier_mode="multiply",
+            ),
         ],
         stacking_groups={},
     )

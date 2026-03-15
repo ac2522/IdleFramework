@@ -40,9 +40,7 @@ def rk4_step(
 
     new_state = {}
     for rid in state:
-        new_state[rid] = state[rid] + (
-            k1[rid] + 2.0 * k2[rid] + 2.0 * k3[rid] + k4[rid]
-        ) / 6.0
+        new_state[rid] = state[rid] + (k1[rid] + 2.0 * k2[rid] + 2.0 * k3[rid] + k4[rid]) / 6.0
 
     return new_state
 

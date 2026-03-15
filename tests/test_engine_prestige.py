@@ -1,29 +1,38 @@
 """Tests for multi-layer prestige in PiecewiseEngine."""
+
 import pytest
-from idleframework.model.nodes import Resource, Generator, PrestigeLayer, Upgrade
+
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.model.edges import Edge
 from idleframework.model.game import GameDefinition
+from idleframework.model.nodes import Generator, PrestigeLayer, Resource
 from idleframework.model.state import GameState
-from idleframework.engine.segments import PiecewiseEngine
 
 
 def _make_two_layer_game():
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", initial_value=1000.0),
             Resource(id="prestige_pts", name="Prestige Points"),
             Resource(id="transcend_pts", name="Transcend Points"),
-            Generator(id="gen1", name="Miner", base_production=10.0, cost_base=10, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=10.0, cost_base=10, cost_growth_rate=1.15
+            ),
             PrestigeLayer(
-                id="prestige", formula_expr="floor(sqrt(lifetime_gold))",
-                layer_index=1, reset_scope=["gen1", "gold"],
+                id="prestige",
+                formula_expr="floor(sqrt(lifetime_gold))",
+                layer_index=1,
+                reset_scope=["gen1", "gold"],
                 persistence_scope=["prestige_pts"],
                 currency_id="prestige_pts",
             ),
             PrestigeLayer(
-                id="transcend", formula_expr="floor(sqrt(lifetime_prestige_pts))",
-                layer_index=2, reset_scope=["gen1", "gold", "prestige_pts"],
+                id="transcend",
+                formula_expr="floor(sqrt(lifetime_prestige_pts))",
+                layer_index=2,
+                reset_scope=["gen1", "gold", "prestige_pts"],
                 persistence_scope=["transcend_pts"],
                 currency_id="transcend_pts",
             ),
@@ -83,21 +92,28 @@ def test_prestige_non_prestige_raises():
 def test_higher_layer_persistence_overrides_lower_reset():
     """Higher layer's persistence_scope should protect nodes from lower layer resets."""
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", initial_value=0.0),
             Resource(id="prestige_pts", name="Prestige Points", initial_value=0.0),
             Resource(id="transcend_pts", name="Transcend Points", initial_value=0.0),
-            Generator(id="gen1", name="Miner", base_production=10.0, cost_base=10.0, cost_growth_rate=1.15),
+            Generator(
+                id="gen1", name="Miner", base_production=10.0, cost_base=10.0, cost_growth_rate=1.15
+            ),
             PrestigeLayer(
-                id="prestige", name="Prestige", formula_expr="10.0",
+                id="prestige",
+                name="Prestige",
+                formula_expr="10.0",
                 layer_index=1,
                 reset_scope=["gold", "gen1", "prestige_pts"],  # Layer 1 resets prestige_pts
                 persistence_scope=[],
                 currency_id="prestige_pts",
             ),
             PrestigeLayer(
-                id="transcend", name="Transcend", formula_expr="5.0",
+                id="transcend",
+                name="Transcend",
+                formula_expr="5.0",
                 layer_index=2,
                 reset_scope=["gold", "gen1", "prestige_pts"],
                 persistence_scope=["prestige_pts"],  # Layer 2 PRESERVES prestige_pts
@@ -117,7 +133,7 @@ def test_higher_layer_persistence_overrides_lower_reset():
     engine = PiecewiseEngine(game, state)
 
     # Execute layer 2 prestige (transcend)
-    gain = engine.execute_prestige("transcend")
+    engine.execute_prestige("transcend")
 
     # prestige_pts should be preserved (higher layer persistence overrides lower reset)
     # initial_value is 0.0, so if reset fires, it would go to 0 — we expect 50 preserved

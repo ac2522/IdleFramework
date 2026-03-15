@@ -1,14 +1,19 @@
 """Property-based tests for new Phase 5 mechanics."""
-import pytest
-from hypothesis import given, strategies as st, assume, settings
 
-from idleframework.model.nodes import (
-    Resource, Generator, TickspeedNode, DrainNode, BuffNode,
-)
+import pytest
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
+
+from idleframework.engine.segments import PiecewiseEngine
 from idleframework.model.edges import Edge
 from idleframework.model.game import GameDefinition
+from idleframework.model.nodes import (
+    DrainNode,
+    Generator,
+    Resource,
+    TickspeedNode,
+)
 from idleframework.model.state import GameState
-from idleframework.engine.segments import PiecewiseEngine
 
 
 @given(tickspeed=st.floats(min_value=0.1, max_value=100.0))
@@ -16,7 +21,8 @@ from idleframework.engine.segments import PiecewiseEngine
 def test_tickspeed_always_scales_production(tickspeed):
     """Higher tickspeed always means higher production."""
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold"),
             Generator(id="g1", name="G", base_production=1.0, cost_base=100, cost_growth_rate=1.15),
@@ -50,10 +56,13 @@ def test_drain_exceeding_production_depletes(drain_rate):
     """When drain > production, resource decreases."""
     assume(drain_rate > 1.0)
     game = GameDefinition(
-        schema_version="1.0", name="test",
+        schema_version="1.0",
+        name="test",
         nodes=[
             Resource(id="gold", name="Gold", initial_value=100.0),
-            Generator(id="g1", name="G", base_production=1.0, cost_base=10000, cost_growth_rate=1.15),
+            Generator(
+                id="g1", name="G", base_production=1.0, cost_base=10000, cost_growth_rate=1.15
+            ),
             DrainNode(id="d1", rate=drain_rate),
         ],
         edges=[
