@@ -19,6 +19,12 @@ from typing import TYPE_CHECKING
 
 from idleframework.bigfloat import BigFloat
 
+try:
+    from idleframework.engine._numba_accel import bulk_purchase_cost_fast as _fast_bulk
+    _HAS_FAST = True
+except Exception:
+    _HAS_FAST = False
+
 if TYPE_CHECKING:
     pass
 
@@ -68,6 +74,13 @@ def bulk_purchase_cost(
     """
     if quantity <= 0:
         return BigFloat(0)
+
+    # Fast path: when both base and rate fit in float64 (exponent == 0),
+    # delegate to the Numba-accelerated implementation.
+    if _HAS_FAST and isinstance(base, BigFloat) and isinstance(rate, BigFloat):
+        if base.exponent == 0 and rate.exponent == 0:
+            result = _fast_bulk(base.mantissa, rate.mantissa, owned, quantity)
+            return BigFloat(result)
 
     rate_f = float(rate)
 
