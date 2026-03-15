@@ -10,6 +10,7 @@ from idleframework.bigfloat import BigFloat, format_bigfloat
 # Construction
 # ---------------------------------------------------------------------------
 
+
 class TestConstruction:
     def test_from_int(self):
         bf = BigFloat(100)
@@ -63,6 +64,7 @@ class TestConstruction:
 # ---------------------------------------------------------------------------
 # Arithmetic
 # ---------------------------------------------------------------------------
+
 
 class TestArithmetic:
     def test_add_same_exponent(self):
@@ -147,6 +149,7 @@ class TestArithmetic:
 # Reverse operators
 # ---------------------------------------------------------------------------
 
+
 class TestReverseOperators:
     def test_radd(self):
         result = 10 + BigFloat(5)
@@ -169,22 +172,23 @@ class TestReverseOperators:
 # Pow / Log
 # ---------------------------------------------------------------------------
 
+
 class TestPowLog:
     def test_integer_pow(self):
         a = BigFloat(2)
-        result = a ** 10
+        result = a**10
         assert float(result) == pytest.approx(1024.0)
 
     def test_large_exponent_pow(self):
         a = BigFloat(10)
-        result = a ** 100
+        result = a**100
         assert result.exponent == 100
         assert result.mantissa == pytest.approx(1.0)
 
     def test_beyond_float_pow(self):
         """1.15^5000 is astronomically large — must not overflow."""
         a = BigFloat(1.15)
-        result = a ** 5000
+        result = a**5000
         # log10(1.15^5000) = 5000 * log10(1.15) ≈ 5000 * 0.06070 ≈ 303.5
         expected_log = 5000 * math.log10(1.15)
         actual_log = result.log10()
@@ -192,17 +196,17 @@ class TestPowLog:
 
     def test_pow_zero(self):
         a = BigFloat(42)
-        result = a ** 0
+        result = a**0
         assert float(result) == pytest.approx(1.0)
 
     def test_pow_one(self):
         a = BigFloat(42)
-        result = a ** 1
+        result = a**1
         assert float(result) == pytest.approx(42.0)
 
     def test_pow_fractional(self):
         a = BigFloat(100)
-        result = a ** 0.5
+        result = a**0.5
         assert float(result) == pytest.approx(10.0, rel=1e-5)
 
     def test_log10(self):
@@ -232,6 +236,7 @@ class TestPowLog:
 # ---------------------------------------------------------------------------
 # Comparison
 # ---------------------------------------------------------------------------
+
 
 class TestComparison:
     def test_lt(self):
@@ -267,6 +272,7 @@ class TestComparison:
 # Conversion
 # ---------------------------------------------------------------------------
 
+
 class TestConversion:
     def test_float_roundtrip(self):
         for val in [0, 1, -1, 42, 0.001, 1e10, -3.14]:
@@ -288,6 +294,7 @@ class TestConversion:
 # Edge cases: idle game formulas
 # ---------------------------------------------------------------------------
 
+
 class TestIdleGameFormulas:
     def test_geometric_series_rate_1(self):
         """Geometric series with rate=1 degenerates to n*base_cost.
@@ -300,7 +307,7 @@ class TestIdleGameFormulas:
         if float(rate) == 1.0:
             total = base_cost * n
         else:
-            total = base_cost * (rate ** n - BigFloat(1)) / (rate - BigFloat(1))
+            total = base_cost * (rate**n - BigFloat(1)) / (rate - BigFloat(1))
         assert float(total) == pytest.approx(1000.0)
 
     def test_bulk_cost_formula(self):
@@ -309,8 +316,8 @@ class TestIdleGameFormulas:
         rate = BigFloat(1.15)
         n = 50
         # Expected: 10 * (1.15^50 - 1) / (1.15 - 1)
-        expected = 10 * (1.15 ** 50 - 1) / (1.15 - 1)
-        result = base * (rate ** n - BigFloat(1)) / (rate - BigFloat(1))
+        expected = 10 * (1.15**50 - 1) / (1.15 - 1)
+        result = base * (rate**n - BigFloat(1)) / (rate - BigFloat(1))
         assert float(result) == pytest.approx(expected, rel=1e-5)
 
     def test_max_affordable(self):
@@ -335,6 +342,7 @@ class TestIdleGameFormulas:
 # ---------------------------------------------------------------------------
 # Display formatting
 # ---------------------------------------------------------------------------
+
 
 class TestFormatting:
     def test_scientific(self):

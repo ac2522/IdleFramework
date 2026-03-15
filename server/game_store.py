@@ -1,4 +1,5 @@
 """File-based game definition storage."""
+
 from __future__ import annotations
 
 import json
@@ -53,23 +54,27 @@ class GameStore:
         for path in sorted(self._bundled_dir.glob("*.json")):
             game = self._load_file(path)
             if game:
-                games.append({
-                    "id": path.stem,
-                    "name": game.name,
-                    "node_count": len(game.nodes),
-                    "edge_count": len(game.edges),
-                    "bundled": True,
-                })
+                games.append(
+                    {
+                        "id": path.stem,
+                        "name": game.name,
+                        "node_count": len(game.nodes),
+                        "edge_count": len(game.edges),
+                        "bundled": True,
+                    }
+                )
         for path in sorted(self._user_dir.glob("*.json")):
             game = self._load_file(path)
             if game:
-                games.append({
-                    "id": path.stem,
-                    "name": game.name,
-                    "node_count": len(game.nodes),
-                    "edge_count": len(game.edges),
-                    "bundled": False,
-                })
+                games.append(
+                    {
+                        "id": path.stem,
+                        "name": game.name,
+                        "node_count": len(game.nodes),
+                        "edge_count": len(game.edges),
+                        "bundled": False,
+                    }
+                )
         return games
 
     def get_game(self, game_id: str) -> GameDefinition | None:
@@ -89,10 +94,7 @@ class GameStore:
         """Save a user game. Returns the game ID."""
         game_id = _slugify(game.name)
         if (self._bundled_dir / f"{game_id}.json").exists():
-            raise ValueError(
-                f"Cannot save: '{game_id}' conflicts with"
-                " bundled game"
-            )
+            raise ValueError(f"Cannot save: '{game_id}' conflicts with bundled game")
         path = self._user_dir / f"{game_id}.json"
         path.write_text(game.model_dump_json(indent=2))
         return game_id
@@ -106,16 +108,12 @@ class GameStore:
             return True
         return False
 
-    def _load_file(
-        self, path: Path
-    ) -> GameDefinition | None:
+    def _load_file(self, path: Path) -> GameDefinition | None:
         try:
             data = json.loads(path.read_text())
             return GameDefinition.model_validate(data)
         except (json.JSONDecodeError, ValidationError) as e:
-            logger.warning(
-                "Failed to load game %s: %s", path, e
-            )
+            logger.warning("Failed to load game %s: %s", path, e)
             return None
 
 

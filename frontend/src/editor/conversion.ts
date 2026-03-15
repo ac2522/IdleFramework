@@ -24,6 +24,8 @@ interface GameEdge {
   rate?: number | null
   formula?: string | null
   condition?: string | null
+  target_property?: string | null
+  modifier_mode?: string | null
 }
 
 export interface GameDefinitionJSON {
@@ -68,7 +70,7 @@ export function graphToGame(
   })
 
   const gameEdges: GameEdge[] = edges.map((edge) => {
-    const edgeData = edge.data as { edgeType?: string; rate?: number; formula?: string; condition?: string } | undefined
+    const edgeData = edge.data as { edgeType?: string; rate?: number; formula?: string; condition?: string; target_property?: string; modifier_mode?: string } | undefined
     const gameEdge: GameEdge = {
       id: edge.id,
       source: edge.source,
@@ -79,6 +81,8 @@ export function graphToGame(
     if (edgeData?.rate != null) gameEdge.rate = edgeData.rate
     if (edgeData?.formula != null) gameEdge.formula = edgeData.formula
     if (edgeData?.condition != null) gameEdge.condition = edgeData.condition
+    if (edgeData?.target_property != null) gameEdge.target_property = edgeData.target_property
+    if (edgeData?.modifier_mode != null) gameEdge.modifier_mode = edgeData.modifier_mode
 
     return gameEdge
   })
@@ -153,6 +157,8 @@ export function gameToGraph(game: GameDefinitionJSON): { nodes: EditorNode[]; ed
     if (gameEdge.rate != null) edgeData.rate = gameEdge.rate
     if (gameEdge.formula != null) edgeData.formula = gameEdge.formula
     if (gameEdge.condition != null) edgeData.condition = gameEdge.condition
+    if (gameEdge.target_property != null) edgeData.target_property = gameEdge.target_property
+    if (gameEdge.modifier_mode != null) edgeData.modifier_mode = gameEdge.modifier_mode
 
     return {
       id: gameEdge.id,

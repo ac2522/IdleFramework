@@ -1,4 +1,5 @@
 """API request/response Pydantic models."""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -6,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 # -- Games --
+
 
 class GameSummary(BaseModel):
     id: str
@@ -25,6 +27,7 @@ class GameCreateResponse(BaseModel):
 
 
 # -- Analysis --
+
 
 class AnalysisRequest(BaseModel):
     game_id: str
@@ -50,6 +53,7 @@ class ReportRequest(BaseModel):
 
 
 # -- Engine Sessions --
+
 
 class StartSessionRequest(BaseModel):
     game_id: str
@@ -133,6 +137,7 @@ class AutoOptimizeResponse(BaseModel):
 
 
 # -- Errors --
+
 
 class ErrorResponse(BaseModel):
     error: str

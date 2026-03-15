@@ -19,6 +19,7 @@ class NodeState(BaseModel):
     purchased: bool = False
     active: bool = True
     total_production: float = 0.0
+    last_fired: float = 0.0
 
 
 class GameState(BaseModel):
@@ -28,6 +29,7 @@ class GameState(BaseModel):
     elapsed_time: float = 0.0
     run_time: float = 0.0
     lifetime_earnings: dict[str, float] = Field(default_factory=dict)
+    layer_run_times: dict[str, float] = Field(default_factory=dict)
 
     @classmethod
     def from_game(cls, game: GameDefinition) -> GameState:

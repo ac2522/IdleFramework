@@ -9,6 +9,8 @@ segment.
 
 from __future__ import annotations
 
+import contextlib
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -17,7 +19,19 @@ from idleframework.engine.events import MAX_PURCHASES_PER_EPSILON
 from idleframework.engine.solvers import (
     bulk_purchase_cost,
 )
-from idleframework.model.nodes import Generator, PrestigeLayer, Register, Resource, Upgrade
+from idleframework.engine.state_edges import apply_property_modifications, evaluate_state_edges
+from idleframework.model.nodes import (
+    AutobuyerNode,
+    BuffNode,
+    DrainNode,
+    Generator,
+    PrestigeLayer,
+    Register,
+    Resource,
+    SynergyNode,
+    TickspeedNode,
+    Upgrade,
+)
 from idleframework.model.stacking import collect_stacking_bonuses, compute_final_multiplier
 from idleframework.model.state import GameState
 
@@ -34,6 +48,17 @@ class Segment:
     production_rates: dict[str, float]  # resource_id -> rate/sec
     multiplier: float  # from stacking groups
     events: list[str] = field(default_factory=list)  # what caused this segment
+    drain_rates: dict[str, float] = field(default_factory=dict)  # resource_id -> drain/sec
+    net_rates: dict[str, float] = field(default_factory=dict)  # resource_id -> net/sec
+    tickspeed: float = 1.0  # current tickspeed multiplier
+
+
+@dataclass
+class BuffMultipliers:
+    """Resolved buff multipliers for production calculation."""
+
+    global_multiplier: float = 1.0
+    per_generator: dict[str, float] = field(default_factory=dict)
 
 
 class PiecewiseEngine:
@@ -51,6 +76,7 @@ class PiecewiseEngine:
     ):
         if validate:
             from idleframework.graph.validation import validate_graph
+
             errors = validate_graph(game)
             if errors:
                 raise ValueError(f"Graph validation errors: {errors}")
@@ -68,6 +94,24 @@ class PiecewiseEngine:
                 self._generators[node.id] = node
             elif isinstance(node, Upgrade):
                 self._upgrades[node.id] = node
+
+        self._tickspeed_node: TickspeedNode | None = None
+        for node in self._game.nodes:
+            if isinstance(node, TickspeedNode):
+                self._tickspeed_node = node
+                break
+
+        self._drains: dict[str, DrainNode] = {}
+        for node in self._game.nodes:
+            if isinstance(node, DrainNode):
+                self._drains[node.id] = node
+
+        self._autobuyers: dict[str, AutobuyerNode] = {}
+        self._autobuyer_targets: set[str] = set()
+        for node in self._game.nodes:
+            if isinstance(node, AutobuyerNode):
+                self._autobuyers[node.id] = node
+                self._autobuyer_targets.add(node.target)
 
     # -- Properties ----------------------------------------------------------
 
@@ -128,6 +172,12 @@ class PiecewiseEngine:
 
         # Build per-generator multiplier from upgrades
         gen_multipliers = self._compute_generator_multipliers()
+        tickspeed = self.compute_tickspeed()
+        buffs = self.evaluate_buffs()
+        synergies = self.compute_synergy_multipliers()
+
+        # Evaluate state edges for property modifications
+        modified = evaluate_state_edges(self._game, self._state)
 
         for node in self._game.nodes:
             if not isinstance(node, Generator):
@@ -136,8 +186,24 @@ class PiecewiseEngine:
             if ns.owned <= 0 or not ns.active:
                 continue
 
+            base_prod = node.base_production
+            # Apply state edge modifications to base_production
+            if node.id in modified and "base_production" in modified[node.id]:
+                base_prod = apply_property_modifications(
+                    base_prod, modified[node.id]["base_production"]
+                )
+
             gen_mult = gen_multipliers.get(node.id, 1.0)
-            rate = node.base_production * ns.owned / node.cycle_time * gen_mult
+            # Apply _general_multiplier from backward-compat state modifiers
+            if node.id in modified and "_general_multiplier" in modified[node.id]:
+                gen_mult = apply_property_modifications(
+                    gen_mult, modified[node.id]["_general_multiplier"]
+                )
+            buff_mult = buffs.global_multiplier * buffs.per_generator.get(node.id, 1.0)
+            syn_mult = synergies.get(node.id, 1.0)
+            rate = (
+                base_prod * ns.owned / node.cycle_time * gen_mult * tickspeed * buff_mult * syn_mult
+            )
 
             # Find which resource(s) this generator produces to
             for edge in self._game.get_edges_from(node.id):
@@ -208,6 +274,210 @@ class PiecewiseEngine:
 
         return result
 
+    def compute_tickspeed(self) -> float:
+        """Resolve the current tickspeed multiplier."""
+        if self._tickspeed_node is None:
+            return 1.0
+        base = self._tickspeed_node.base_tickspeed
+
+        # Collect upgrades targeting the tickspeed node
+        ts_id = self._tickspeed_node.id
+        ts_groups: dict[str, dict] = {}
+        for node in self._game.nodes:
+            if not isinstance(node, Upgrade):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.purchased:
+                continue
+            if node.target != ts_id:
+                continue
+            sg = node.stacking_group
+            rule = self._game.stacking_groups.get(sg, "multiplicative")
+            if sg not in ts_groups:
+                ts_groups[sg] = {"rule": rule, "bonuses": []}
+            ts_groups[sg]["bonuses"].append(node.magnitude)
+
+        mult = compute_final_multiplier(ts_groups) if ts_groups else 1.0
+        return base * mult
+
+    def evaluate_buffs(self) -> BuffMultipliers:
+        """Compute expected-value buff multipliers.
+
+        Timed: EV = 1 + (mult-1) * (duration/(duration+cooldown))
+        Zero cooldown: EV = multiplier (always active)
+        Proc: EV = 1 + proc_chance * (mult-1)
+        """
+        result = BuffMultipliers()
+        per_gen: dict[str, float] = defaultdict(lambda: 1.0)
+
+        for node in self._game.nodes:
+            if not isinstance(node, BuffNode):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.active:
+                continue
+
+            if node.buff_type == "timed":
+                if node.cooldown == 0.0:
+                    ev = node.multiplier
+                else:
+                    d = node.duration or 0.0
+                    ev = 1.0 + (node.multiplier - 1.0) * (d / (d + node.cooldown))
+            elif node.buff_type == "proc":
+                pc = node.proc_chance or 0.0
+                ev = 1.0 + pc * (node.multiplier - 1.0)
+            else:
+                ev = 1.0
+
+            if node.target is None:
+                result.global_multiplier *= ev
+            else:
+                per_gen[node.target] *= ev
+
+        result.per_generator = dict(per_gen)
+        return result
+
+    def compute_synergy_multipliers(self) -> dict[str, float]:
+        """Compute per-generator multipliers from SynergyNodes."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
+        synergies: dict[str, float] = {}
+        variables = build_state_variables(self._game, self._state)
+
+        for node in self._game.nodes:
+            if not isinstance(node, SynergyNode):
+                continue
+            ns = self._state.get(node.id)
+            if not ns.active:
+                continue
+            compiled = compile_formula(node.formula_expr)
+            bonus = float(evaluate_formula(compiled, variables))
+            # Apply as additive bonus: target_mult = 1 + bonus
+            if node.target in synergies:
+                synergies[node.target] += bonus
+            else:
+                synergies[node.target] = bonus
+
+        # Convert to multipliers: 1 + total_bonus
+        return {k: 1.0 + v for k, v in synergies.items()}
+
+    def compute_drain_rates(self) -> dict[str, float]:
+        """Compute per-resource drain rates from active DrainNodes."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
+        drains: dict[str, float] = {}
+        for drain in self._drains.values():
+            ns = self._state.get(drain.id)
+            if not ns.active:
+                continue
+            # Evaluate condition if present
+            if drain.condition is not None:
+                variables = build_state_variables(self._game, self._state)
+                compiled = compile_formula(drain.condition)
+                result = float(evaluate_formula(compiled, variables))
+                if result <= 0:
+                    continue
+            # Find target resource via consumption edge
+            for edge in self._game.get_edges_from(drain.id):
+                if edge.edge_type == "consumption":
+                    drains[edge.target] = drains.get(edge.target, 0.0) + drain.rate
+        return drains
+
+    def compute_gross_rates(self) -> dict[str, float]:
+        """Alias for compute_production_rates (gross, before drains)."""
+        return self.compute_production_rates()
+
+    def _compute_net_rates(self) -> tuple[dict[str, float], dict[str, float]]:
+        """Compute gross and net rates. Returns (gross_rates, net_rates)."""
+        gross = self.compute_production_rates()
+        drains = self.compute_drain_rates()
+        net = {}
+        for res_id in set(list(gross.keys()) + list(drains.keys())):
+            net[res_id] = gross.get(res_id, 0.0) - drains.get(res_id, 0.0)
+        return gross, net
+
+    def _find_next_zero_crossing(self, net_rates: dict[str, float]) -> tuple[str, float] | None:
+        """Find earliest resource depletion from negative net rate."""
+        best: tuple[str, float] | None = None
+        for res_id, rate in net_rates.items():
+            if rate >= 0:
+                continue
+            balance = self._state.get(res_id).current_value
+            if balance <= 0:
+                continue
+            time_to_zero = balance / abs(rate)
+            if best is None or time_to_zero < best[1]:
+                best = (res_id, time_to_zero)
+        return best
+
+    # -- Autobuyer support ---------------------------------------------------
+
+    def _next_autobuyer_time(self) -> tuple[str, float] | None:
+        """Find the earliest autobuyer fire time."""
+        best: tuple[str, float] | None = None
+        for ab_id, ab in self._autobuyers.items():
+            ns = self._state.get(ab_id)
+            if not ns.active or not ab.enabled:
+                continue
+            next_fire = ns.last_fired + ab.interval
+            if next_fire <= self._time:
+                next_fire = self._time  # Fire immediately
+            if best is None or next_fire < best[1]:
+                best = (ab_id, next_fire)
+        return best
+
+    def _execute_autobuyer(self, autobuyer_id: str) -> None:
+        """Execute an autobuyer fire event."""
+        ab = self._autobuyers[autobuyer_id]
+        ns = self._state.get(autobuyer_id)
+
+        # Evaluate condition if set
+        if ab.condition is not None:
+            from idleframework.dsl.compiler import compile_formula, evaluate_formula
+            from idleframework.engine.variables import build_state_variables
+
+            variables = build_state_variables(self._game, self._state)
+            compiled = compile_formula(ab.condition)
+            if not float(evaluate_formula(compiled, variables)):
+                ns.last_fired = self._time
+                return
+
+        # Resolve bulk amount
+        amount = 1
+        if ab.bulk_amount == "10":
+            amount = 10
+        elif ab.bulk_amount == "max":
+            amount = self._compute_max_affordable(ab.target)
+
+        if amount > 0:
+            with contextlib.suppress(ValueError):
+                self.purchase(ab.target, amount)
+
+        ns.last_fired = self._time
+
+    def _compute_max_affordable(self, node_id: str) -> int:
+        """Compute maximum affordable count for a node using closed-form formula."""
+        from idleframework.engine.solvers import max_affordable
+
+        node = self._game.get_node(node_id)
+        if not isinstance(node, Generator):
+            return 1  # Upgrades are 0 or 1
+
+        currency_id = self._get_currency_resource_id_for(node_id)
+        if not currency_id:
+            return 0
+        balance = self._state.get(currency_id).current_value
+        ns = self._state.get(node_id)
+
+        return max_affordable(
+            BigFloat(balance),
+            BigFloat(node.cost_base),
+            BigFloat(node.cost_growth_rate),
+            ns.owned,
+        )
+
     # -- Next purchase -------------------------------------------------------
 
     def find_next_purchase(self) -> tuple[str, float] | None:
@@ -219,7 +489,8 @@ class PiecewiseEngine:
 
         Returns (node_id, time_from_now) or None if nothing is purchasable.
         """
-        rates = self.compute_production_rates()
+        _, net_rates = self._compute_net_rates()
+        rates = net_rates
 
         if not rates or all(r <= 0 for r in rates.values()):
             return None
@@ -231,6 +502,8 @@ class PiecewiseEngine:
 
         for node in self._game.nodes:
             if isinstance(node, Generator):
+                if node.id in self._autobuyer_targets:
+                    continue  # Skip autobuyer-managed nodes
                 ns = self._state.get(node.id)
                 cost_bf = bulk_purchase_cost(
                     BigFloat(node.cost_base),
@@ -433,8 +706,7 @@ class PiecewiseEngine:
                 tol = max(1e-4, abs(cost) * 1e-9)
                 if balance < cost - tol:
                     raise ValueError(
-                        f"Cannot afford upgrade {node_id!r}: "
-                        f"need {cost:.2f}, have {balance:.2f}"
+                        f"Cannot afford upgrade {node_id!r}: need {cost:.2f}, have {balance:.2f}"
                     )
                 if balance < cost:
                     self._state.get(currency_id).current_value = 0.0
@@ -458,6 +730,57 @@ class PiecewiseEngine:
             raise ValueError(f"{prestige_id!r} is not a PrestigeLayer")
         compiled = compile_formula(node.formula_expr)
         return float(evaluate_formula(compiled, kwargs))
+
+    def execute_prestige(self, prestige_id: str) -> float:
+        """Execute a prestige reset: compute gain, deposit currency, reset scopes."""
+        from idleframework.dsl.compiler import compile_formula, evaluate_formula
+        from idleframework.engine.variables import build_state_variables
+
+        node = self._game.get_node(prestige_id)
+        if not isinstance(node, PrestigeLayer):
+            raise ValueError(f"{prestige_id!r} is not a PrestigeLayer")
+
+        variables = build_state_variables(self._game, self._state)
+        compiled = compile_formula(node.formula_expr)
+        gain = float(evaluate_formula(compiled, variables))
+
+        # Deposit into currency resource
+        if node.currency_id:
+            self._state.get(node.currency_id).current_value += gain
+
+        # Collect persistence from the current (highest) layer
+        all_persist = set(node.persistence_scope)
+
+        # Reset all lower layers, but respect higher layer persistence
+        for other in self._game.nodes:
+            if isinstance(other, PrestigeLayer) and other.layer_index < node.layer_index:
+                # Merge: lower layer persistence + higher layer persistence
+                merged_persist = set(other.persistence_scope) | all_persist
+                self._execute_reset(other.reset_scope, list(merged_persist))
+                self._state.layer_run_times[other.id] = 0.0
+
+        # Reset this layer's scope
+        self._execute_reset(node.reset_scope, node.persistence_scope)
+        self._state.layer_run_times[prestige_id] = 0.0
+
+        return gain
+
+    def _execute_reset(self, reset_scope: list[str], persistence_scope: list[str]) -> None:
+        """Reset nodes in reset_scope except those in persistence_scope."""
+        persist = set(persistence_scope)
+        for node_id in reset_scope:
+            if node_id in persist:
+                continue
+            ns = self._state.get(node_id)
+            node = self._game.get_node(node_id)
+            if isinstance(node, Resource):
+                ns.current_value = node.initial_value
+            elif isinstance(node, Generator):
+                ns.owned = 0
+                ns.total_production = 0.0
+            elif isinstance(node, Upgrade):
+                ns.purchased = False
+            ns.last_fired = 0.0
 
     def evaluate_register(self, register_id: str, variables: dict[str, float]) -> float:
         """Evaluate a register node's formula with given variables."""
@@ -552,18 +875,46 @@ class PiecewiseEngine:
             # Apply free purchases at current time
             self.apply_free_purchases()
 
-            rates = self.compute_production_rates()
+            gross_rates, net_rates = self._compute_net_rates()
+            rates = net_rates  # Use net rates for accumulation
 
-            # Find next purchase
+            # Find next events
             next_purchase = self.find_next_purchase()
+            next_ab = self._next_autobuyer_time()
+
+            # Determine event times
+            purchase_time = None
+            ab_time = None
+            node_id = None
+            ab_id = None
 
             if next_purchase is not None:
                 node_id, time_needed = next_purchase
                 purchase_time = self._time + time_needed
-            else:
-                purchase_time = None
 
-            if purchase_time is not None and purchase_time < target_time - 1e-12:
+            if next_ab is not None:
+                ab_id, ab_time = next_ab
+
+            # Check if autobuyer fires before purchase and before target
+            ab_fires_first = (
+                ab_time is not None
+                and ab_time < target_time - 1e-12
+                and (purchase_time is None or ab_time < purchase_time)
+            )
+
+            if ab_fires_first:
+                # Advance to autobuyer fire time
+                dt = ab_time - self._time
+                if dt < 0:
+                    dt = 0.0
+                if dt > 0:
+                    seg = self._create_segment(rates, dt, [f"autobuyer:{ab_id}"])
+                    new_segments.append(seg)
+                    self._accumulate(rates, dt)
+                    self._time = ab_time
+                self._execute_autobuyer(ab_id)
+
+            elif purchase_time is not None and purchase_time < target_time - 1e-12:
                 # Advance to purchase time
                 dt = purchase_time - self._time
                 if dt < 0:
@@ -604,7 +955,7 @@ class PiecewiseEngine:
                         break
 
                     # Check for near-simultaneous purchases
-                    rates = self.compute_production_rates()
+                    _, rates = self._compute_net_rates()
                     next_purchase = self.find_next_purchase()
                     if next_purchase is None:
                         break
@@ -617,7 +968,7 @@ class PiecewiseEngine:
                         break
 
             else:
-                # No purchase before target_time -- advance to target
+                # No purchase or autobuyer before target_time -- advance to target
                 dt = target_time - self._time
                 seg = self._create_segment(rates, dt, [])
                 new_segments.append(seg)
@@ -648,10 +999,23 @@ class PiecewiseEngine:
         for resource_id, rate in rates.items():
             ns = self._state.get(resource_id)
             ns.current_value += rate * dt
-            ns.total_production += rate * dt
+            if rate > 0:
+                ns.total_production += rate * dt
+            # Clamp at 0
+            if ns.current_value < 0:
+                ns.current_value = 0.0
 
-        # Track lifetime earnings
+        # Clamp to capacity if set
+        for node in self._game.nodes:
+            if isinstance(node, Resource) and node.capacity is not None:
+                ns = self._state.get(node.id)
+                if ns.current_value > node.capacity:
+                    ns.current_value = node.capacity
+
+        # Track lifetime earnings (only positive rates)
         for resource_id, rate in rates.items():
+            if rate <= 0:
+                continue
             earned = rate * dt
             if resource_id in self._state.lifetime_earnings:
                 self._state.lifetime_earnings[resource_id] += earned
@@ -666,10 +1030,14 @@ class PiecewiseEngine:
         if node_id in self._generators:
             gen = self._generators[node_id]
             ns = self._state.get(node_id)
-            cost = float(bulk_purchase_cost(
-                BigFloat(gen.cost_base), BigFloat(gen.cost_growth_rate),
-                ns.owned, 1,
-            ))
+            cost = float(
+                bulk_purchase_cost(
+                    BigFloat(gen.cost_base),
+                    BigFloat(gen.cost_growth_rate),
+                    ns.owned,
+                    1,
+                )
+            )
         elif node_id in self._upgrades:
             cost = self._upgrades[node_id].cost
         else:

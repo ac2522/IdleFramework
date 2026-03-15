@@ -203,23 +203,33 @@ def test_collect_achievement_bonus():
     nodes = [
         {"type": "resource", "id": "cash", "name": "Cash"},
         {
-            "type": "generator", "id": "gen1", "name": "Gen 1",
-            "base_production": 1.0, "cost_base": 10.0, "cost_growth_rate": 1.07,
+            "type": "generator",
+            "id": "gen1",
+            "name": "Gen 1",
+            "base_production": 1.0,
+            "cost_base": 10.0,
+            "cost_growth_rate": 1.07,
         },
         {
-            "type": "achievement", "id": "milestone_25",
+            "type": "achievement",
+            "id": "milestone_25",
             "name": "25 Generators",
             "condition_type": "single_threshold",
             "targets": [{"node_id": "gen1", "property": "owned", "threshold": 25}],
             "bonus": {
-                "type": "multiplicative", "magnitude": 2.0,
-                "target": "gen1", "stacking_group": "milestones",
+                "type": "multiplicative",
+                "magnitude": 2.0,
+                "target": "gen1",
+                "stacking_group": "milestones",
             },
         },
     ]
     stacking_groups = {"milestones": "multiplicative"}
     game = GameDefinition(
-        schema_version="1.0", name="Test", nodes=nodes, edges=[],
+        schema_version="1.0",
+        name="Test",
+        nodes=nodes,
+        edges=[],
         stacking_groups=stacking_groups,
     )
     state = GameState.from_game(game)
@@ -236,9 +246,14 @@ def test_collect_upgrade_owned_count():
     """Stackable upgrades should contribute bonus × owned count."""
     upgrades = [
         {
-            "type": "upgrade", "id": "u1", "name": "Repeatable Boost",
-            "upgrade_type": "multiplicative", "magnitude": 2.0,
-            "cost": 100, "target": "gen1", "stacking_group": "cash_mults",
+            "type": "upgrade",
+            "id": "u1",
+            "name": "Repeatable Boost",
+            "upgrade_type": "multiplicative",
+            "magnitude": 2.0,
+            "cost": 100,
+            "target": "gen1",
+            "stacking_group": "cash_mults",
         },
     ]
     stacking_groups = {"cash_mults": "multiplicative"}

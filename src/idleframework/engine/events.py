@@ -58,9 +58,26 @@ _IDENTIFIER_RE = re.compile(r"\b([a-z_][a-z_0-9]*)\b")
 
 # Built-in function names and constants that are NOT variables
 _BUILTINS = {
-    "sqrt", "log", "log10", "exp", "abs", "min", "max", "floor", "ceil",
-    "pow", "sin", "cos", "tan", "pi", "e", "if", "sum", "prod",
-    "true", "false",
+    "sqrt",
+    "log",
+    "log10",
+    "exp",
+    "abs",
+    "min",
+    "max",
+    "floor",
+    "ceil",
+    "pow",
+    "sin",
+    "cos",
+    "tan",
+    "pi",
+    "e",
+    "if",
+    "sum",
+    "prod",
+    "true",
+    "false",
 }
 
 

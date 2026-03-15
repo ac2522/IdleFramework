@@ -12,6 +12,7 @@ from idleframework.optimizer.greedy import GreedyOptimizer, PurchaseStep
 # Helper: build a minimal 2-generator game for unit tests
 # ---------------------------------------------------------------------------
 
+
 def _two_gen_game() -> GameDefinition:
     """Two generators producing into one resource.
 
@@ -28,14 +29,22 @@ def _two_gen_game() -> GameDefinition:
         "nodes": [
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 1000.0},
             {
-                "id": "gen_a", "type": "generator", "name": "Gen A",
-                "base_production": 10.0, "cost_base": 100.0,
-                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+                "id": "gen_a",
+                "type": "generator",
+                "name": "Gen A",
+                "base_production": 10.0,
+                "cost_base": 100.0,
+                "cost_growth_rate": 1.07,
+                "cycle_time": 1.0,
             },
             {
-                "id": "gen_b", "type": "generator", "name": "Gen B",
-                "base_production": 5.0, "cost_base": 20.0,
-                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+                "id": "gen_b",
+                "type": "generator",
+                "name": "Gen B",
+                "base_production": 5.0,
+                "cost_base": 20.0,
+                "cost_growth_rate": 1.07,
+                "cycle_time": 1.0,
             },
         ],
         "edges": [
@@ -56,19 +65,32 @@ def _two_gen_with_mult_upgrade() -> GameDefinition:
         "nodes": [
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 5000.0},
             {
-                "id": "gen_a", "type": "generator", "name": "Gen A",
-                "base_production": 10.0, "cost_base": 100.0,
-                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+                "id": "gen_a",
+                "type": "generator",
+                "name": "Gen A",
+                "base_production": 10.0,
+                "cost_base": 100.0,
+                "cost_growth_rate": 1.07,
+                "cycle_time": 1.0,
             },
             {
-                "id": "gen_b", "type": "generator", "name": "Gen B",
-                "base_production": 5.0, "cost_base": 20.0,
-                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+                "id": "gen_b",
+                "type": "generator",
+                "name": "Gen B",
+                "base_production": 5.0,
+                "cost_base": 20.0,
+                "cost_growth_rate": 1.07,
+                "cycle_time": 1.0,
             },
             {
-                "id": "x3_a", "type": "upgrade", "name": "x3 Gen A",
-                "upgrade_type": "multiplicative", "magnitude": 3.0,
-                "cost": 500.0, "target": "gen_a", "stacking_group": "upgrades",
+                "id": "x3_a",
+                "type": "upgrade",
+                "name": "x3 Gen A",
+                "upgrade_type": "multiplicative",
+                "magnitude": 3.0,
+                "cost": 500.0,
+                "target": "gen_a",
+                "stacking_group": "upgrades",
             },
         ],
         "edges": [
@@ -89,19 +111,32 @@ def _two_gen_with_additive_upgrade() -> GameDefinition:
         "nodes": [
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 5000.0},
             {
-                "id": "gen_a", "type": "generator", "name": "Gen A",
-                "base_production": 10.0, "cost_base": 100.0,
-                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+                "id": "gen_a",
+                "type": "generator",
+                "name": "Gen A",
+                "base_production": 10.0,
+                "cost_base": 100.0,
+                "cost_growth_rate": 1.07,
+                "cycle_time": 1.0,
             },
             {
-                "id": "gen_b", "type": "generator", "name": "Gen B",
-                "base_production": 5.0, "cost_base": 20.0,
-                "cost_growth_rate": 1.07, "cycle_time": 1.0,
+                "id": "gen_b",
+                "type": "generator",
+                "name": "Gen B",
+                "base_production": 5.0,
+                "cost_base": 20.0,
+                "cost_growth_rate": 1.07,
+                "cycle_time": 1.0,
             },
             {
-                "id": "add_a", "type": "upgrade", "name": "+50 Gen A",
-                "upgrade_type": "additive", "magnitude": 50.0,
-                "cost": 200.0, "target": "gen_a", "stacking_group": "upgrades",
+                "id": "add_a",
+                "type": "upgrade",
+                "name": "+50 Gen A",
+                "upgrade_type": "additive",
+                "magnitude": 50.0,
+                "cost": 200.0,
+                "target": "gen_a",
+                "stacking_group": "upgrades",
             },
         ],
         "edges": [
@@ -284,3 +319,146 @@ class TestGreedyConstraints:
         steps = opt.run(target_time=100.0, max_steps=10)
 
         assert steps == []
+
+
+def test_greedy_tickspeed_upgrade_efficiency():
+    """Tickspeed upgrade should be valued based on total production impact."""
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource, TickspeedNode, Upgrade
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0",
+        name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=1000.0),
+            Generator(
+                id="gen1", name="Miner", base_production=10.0, cost_base=100, cost_growth_rate=1.15
+            ),
+            TickspeedNode(id="ts1"),
+            Upgrade(
+                id="ts_upg",
+                name="Tick Boost",
+                upgrade_type="multiplicative",
+                magnitude=2.0,
+                cost=500.0,
+                target="ts1",
+                stacking_group="tick",
+            ),
+        ],
+        edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
+        stacking_groups={"tick": "multiplicative"},
+    )
+    state = GameState.from_game(game)
+    state.get("gen1").owned = 5
+    opt = GreedyOptimizer(game, state)
+    eff = opt.compute_upgrade_efficiency("ts_upg")
+    assert eff > 0  # Should have positive efficiency
+
+
+def test_greedy_prestige_candidate():
+    """Prestige should appear as a candidate when gain > 0."""
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, PrestigeLayer, Resource
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0",
+        name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=0.0),
+            Resource(id="pp", name="PP"),
+            Generator(
+                id="gen1", name="G", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
+            PrestigeLayer(
+                id="p1",
+                formula_expr="floor(sqrt(lifetime_gold))",
+                layer_index=1,
+                reset_scope=["gen1", "gold"],
+                currency_id="pp",
+            ),
+        ],
+        edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gen1").owned = 1
+    state.lifetime_earnings["gold"] = 10000.0
+    opt = GreedyOptimizer(game, state)
+    candidates = opt.get_candidates()
+    prestige_candidates = [c for c in candidates if c.get("type") == "prestige"]
+    assert len(prestige_candidates) > 0
+
+
+def test_approximation_level_exact():
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import Generator, Resource
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0",
+        name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=0.0),
+            Generator(
+                id="gen1", name="G", base_production=1.0, cost_base=10, cost_growth_rate=1.15
+            ),
+        ],
+        edges=[Edge(id="e1", source="gen1", target="gold", edge_type="production_target")],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gen1").owned = 1
+    opt = GreedyOptimizer(game, state)
+    result = opt.optimize(target_time=60.0, max_steps=10)
+    assert result.approximation_level == "exact"
+
+
+def test_greedy_skips_autobuyer_targets():
+    """Greedy should not recommend purchasing nodes managed by autobuyers."""
+    from idleframework.model.edges import Edge
+    from idleframework.model.game import GameDefinition
+    from idleframework.model.nodes import AutobuyerNode, Generator, Resource
+    from idleframework.model.state import GameState
+    from idleframework.optimizer.greedy import GreedyOptimizer
+
+    game = GameDefinition(
+        schema_version="1.0",
+        name="test",
+        nodes=[
+            Resource(id="gold", name="Gold", initial_value=10000.0),
+            Generator(
+                id="gen1",
+                name="Auto-Miner",
+                base_production=10.0,
+                cost_base=10,
+                cost_growth_rate=1.15,
+            ),
+            Generator(
+                id="gen2",
+                name="Manual-Logger",
+                base_production=5.0,
+                cost_base=10,
+                cost_growth_rate=1.15,
+            ),
+            AutobuyerNode(id="ab1", target="gen1", interval=1.0),
+        ],
+        edges=[
+            Edge(id="e1", source="gen1", target="gold", edge_type="production_target"),
+            Edge(id="e2", source="gen2", target="gold", edge_type="production_target"),
+        ],
+        stacking_groups={},
+    )
+    state = GameState.from_game(game)
+    state.get("gen2").owned = 1
+    opt = GreedyOptimizer(game, state)
+    best = opt.find_best_purchase()
+    assert best is not None
+    assert best[0] == "gen2"  # Should skip gen1 (autobuyer-managed)

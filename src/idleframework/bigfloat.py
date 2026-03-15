@@ -68,7 +68,7 @@ def _normalize(mantissa: float, exponent: int) -> tuple[float, int]:
     log_m = math.log10(abs_m)
     shift = math.floor(log_m)
 
-    new_mantissa = abs_m / (10.0 ** shift)
+    new_mantissa = abs_m / (10.0**shift)
     new_exponent = exponent + shift
 
     # Fix floating-point edge cases where new_mantissa might be
@@ -336,9 +336,8 @@ class BigFloat:
                 return False
             return False
 
-        return (
-            self.exponent == other.exponent
-            and round(self.mantissa, 10) == round(other.mantissa, 10)
+        return self.exponent == other.exponent and round(self.mantissa, 10) == round(
+            other.mantissa, 10
         )
 
     def __lt__(self, other: object) -> bool:
@@ -389,7 +388,7 @@ class BigFloat:
         if self._is_zero():
             return 0.0
         try:
-            return self.mantissa * (10.0 ** self.exponent)
+            return self.mantissa * (10.0**self.exponent)
         except OverflowError:
             return math.inf if self.mantissa > 0 else -math.inf
 
@@ -417,6 +416,7 @@ class BigFloat:
 # ---------------------------------------------------------------------------
 # Formatting helper
 # ---------------------------------------------------------------------------
+
 
 def format_bigfloat(value: BigFloat, style: str = "scientific") -> str:
     """Format a BigFloat for display.
@@ -466,5 +466,5 @@ def _format_with_suffixes(value: BigFloat, suffixes: list[tuple[int, str]]) -> s
 
     # Adjust mantissa to match the suffix
     shift = exp - best_exp
-    display_mantissa = value.mantissa * (10.0 ** shift)
+    display_mantissa = value.mantissa * (10.0**shift)
     return f"{display_mantissa:.2f} {best_name}"

@@ -1,4 +1,5 @@
 """Tests for the analysis engine detectors."""
+
 import json
 import sys
 from pathlib import Path
@@ -82,18 +83,32 @@ class TestDominantStrategyDetection:
             name="DominantTest",
             nodes=[
                 {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-                {"id": "weak", "type": "generator", "name": "Weak",
-                 "base_production": 1.0, "cost_base": 1000.0, "cost_growth_rate": 1.15,
-                 "cycle_time": 1.0},
-                {"id": "strong", "type": "generator", "name": "Strong",
-                 "base_production": 100.0, "cost_base": 10.0, "cost_growth_rate": 1.07,
-                 "cycle_time": 1.0},
+                {
+                    "id": "weak",
+                    "type": "generator",
+                    "name": "Weak",
+                    "base_production": 1.0,
+                    "cost_base": 1000.0,
+                    "cost_growth_rate": 1.15,
+                    "cycle_time": 1.0,
+                },
+                {
+                    "id": "strong",
+                    "type": "generator",
+                    "name": "Strong",
+                    "base_production": 100.0,
+                    "cost_base": 10.0,
+                    "cost_growth_rate": 1.07,
+                    "cycle_time": 1.0,
+                },
             ],
             edges=[
                 {"id": "e1", "source": "weak", "target": "cash", "edge_type": "production_target"},
                 {
-                    "id": "e2", "source": "strong",
-                    "target": "cash", "edge_type": "production_target",
+                    "id": "e2",
+                    "source": "strong",
+                    "target": "cash",
+                    "edge_type": "production_target",
                 },
             ],
             stacking_groups={},
@@ -108,12 +123,24 @@ class TestDominantStrategyDetection:
             name="BalancedTest",
             nodes=[
                 {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-                {"id": "gen_a", "type": "generator", "name": "Gen A",
-                 "base_production": 10.0, "cost_base": 100.0, "cost_growth_rate": 1.15,
-                 "cycle_time": 1.0},
-                {"id": "gen_b", "type": "generator", "name": "Gen B",
-                 "base_production": 10.0, "cost_base": 100.0, "cost_growth_rate": 1.15,
-                 "cycle_time": 1.0},
+                {
+                    "id": "gen_a",
+                    "type": "generator",
+                    "name": "Gen A",
+                    "base_production": 10.0,
+                    "cost_base": 100.0,
+                    "cost_growth_rate": 1.15,
+                    "cycle_time": 1.0,
+                },
+                {
+                    "id": "gen_b",
+                    "type": "generator",
+                    "name": "Gen B",
+                    "base_production": 10.0,
+                    "cost_base": 100.0,
+                    "cost_growth_rate": 1.15,
+                    "cycle_time": 1.0,
+                },
             ],
             edges=[
                 {"id": "e1", "source": "gen_a", "target": "cash", "edge_type": "production_target"},

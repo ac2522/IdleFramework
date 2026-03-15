@@ -31,9 +31,11 @@ function EditorCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [gameName, setGameName] = useState('Untitled Game')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const { screenToFlowPosition } = useReactFlow()
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+  const selectedEdge = edges.find((e) => e.id === selectedEdgeId) ?? null
 
   const onConnect: OnConnect = useCallback(
     (params) => {
@@ -86,10 +88,17 @@ function EditorCanvas() {
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id)
+    setSelectedEdgeId(null)
+  }, [])
+
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    setSelectedEdgeId(edge.id)
+    setSelectedNodeId(null)
   }, [])
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null)
+    setSelectedEdgeId(null)
   }, [])
 
   const onUpdateNode = useCallback(
@@ -101,6 +110,17 @@ function EditorCanvas() {
       )
     },
     [setNodes],
+  )
+
+  const onUpdateEdge = useCallback(
+    (edgeId: string, data: Record<string, unknown>) => {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edgeId ? { ...e, data } : e,
+        ),
+      )
+    },
+    [setEdges],
   )
 
   const onLoadGraph = useCallback(
@@ -132,6 +152,7 @@ function EditorCanvas() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             nodeTypes={editorNodeTypes}
             edgeTypes={editorEdgeTypes}
@@ -147,6 +168,9 @@ function EditorCanvas() {
             <PropertyPanel
               selectedNode={selectedNode as Node<EditorNodeData> | null}
               onUpdateNode={onUpdateNode}
+              allNodes={nodes as unknown as Node<EditorNodeData>[]}
+              selectedEdge={selectedEdge}
+              onUpdateEdge={onUpdateEdge}
             />
           </div>
           <div className="border-t border-gray-200 dark:border-gray-700 flex-1 overflow-y-auto">

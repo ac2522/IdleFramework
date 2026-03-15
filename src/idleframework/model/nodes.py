@@ -1,4 +1,4 @@
-"""All 17 node types as Pydantic v2 models with discriminated union."""
+"""All 22 node types as Pydantic v2 models with discriminated union."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class ConverterIO(BaseModel):
 
     resource: str
     amount: float
+    formula: str | None = None
 
 
 # ---------- NodeBase ----------
@@ -37,13 +38,15 @@ class NodeBase(BaseModel):
     cooldown_time: float | None = None
 
 
-# ---------- 17 Node types ----------
+# ---------- 22 Node types ----------
 
 
 class Resource(NodeBase):
     type: Literal["resource"] = "resource"
     name: str
     initial_value: float = 0.0
+    capacity: float | None = None
+    overflow_behavior: Literal["clamp", "waste"] = "clamp"
 
 
 class Generator(NodeBase):
@@ -85,6 +88,8 @@ class PrestigeLayer(NodeBase):
     persistence_scope: list[str] = Field(default_factory=list)
     bonus_type: Literal["multiplicative", "additive", "percentage"] = "multiplicative"
     milestone_rules: list[dict] = Field(default_factory=list)
+    currency_id: str | None = None
+    parent_layer: str | None = None
 
 
 class SacrificeNode(NodeBase):
@@ -119,6 +124,8 @@ class Converter(NodeBase):
     outputs: list[ConverterIO]
     rate: float = 1.0
     pull_mode: Literal["pull_any", "pull_all"] = "pull_any"
+    recipe_type: Literal["fixed", "scaling"] = "fixed"
+    conversion_limit: int | None = None
 
 
 class ProbabilityNode(NodeBase):
@@ -133,9 +140,9 @@ class ProbabilityNode(NodeBase):
 class EndCondition(NodeBase):
     type: Literal["end_condition"] = "end_condition"
     name: str = ""
-    condition_type: Literal[
-        "single_threshold", "multi_threshold", "collection", "compound"
-    ] = "single_threshold"
+    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = (
+        "single_threshold"
+    )
     targets: list[ConditionTarget]
     logic: str = "and"
 
@@ -143,9 +150,9 @@ class EndCondition(NodeBase):
 class UnlockGate(NodeBase):
     type: Literal["unlock_gate"] = "unlock_gate"
     name: str = ""
-    condition_type: Literal[
-        "single_threshold", "multi_threshold", "collection", "compound"
-    ] = "single_threshold"
+    condition_type: Literal["single_threshold", "multi_threshold", "collection", "compound"] = (
+        "single_threshold"
+    )
     targets: list[ConditionTarget]
     prerequisites: list[str]
     logic: str = "and"
@@ -183,12 +190,72 @@ class Queue(NodeBase):
     capacity: int | None = None
 
 
+class TickspeedNode(NodeBase):
+    type: Literal["tickspeed"] = "tickspeed"
+    name: str = "Tickspeed"
+    base_tickspeed: float = 1.0
+
+
+class AutobuyerNode(NodeBase):
+    type: Literal["autobuyer"] = "autobuyer"
+    name: str = ""
+    target: str
+    interval: float = 1.0
+    priority: int = 0
+    condition: str | None = None
+    bulk_amount: Literal["1", "10", "max"] = "1"
+    enabled: bool = True
+
+
+class DrainNode(NodeBase):
+    type: Literal["drain"] = "drain"
+    name: str = ""
+    rate: float
+    condition: str | None = None
+
+
+class BuffNode(NodeBase):
+    type: Literal["buff"] = "buff"
+    name: str = ""
+    buff_type: Literal["timed", "proc"]
+    duration: float | None = None
+    proc_chance: float | None = None
+    multiplier: float = 2.0
+    target: str | None = None
+    cooldown: float = 0.0
+
+
+class SynergyNode(NodeBase):
+    type: Literal["synergy"] = "synergy"
+    name: str = ""
+    sources: list[str]
+    formula_expr: str
+    target: str
+
+
 # ---------- Discriminated Union ----------
 
 NodeUnion = Annotated[
-    Resource | Generator | NestedGenerator | Upgrade | PrestigeLayer
-    | SacrificeNode | Achievement | Manager | Converter
-    | ProbabilityNode | EndCondition | UnlockGate | ChoiceGroup
-    | Register | Gate | Queue,
+    Resource
+    | Generator
+    | NestedGenerator
+    | Upgrade
+    | PrestigeLayer
+    | SacrificeNode
+    | Achievement
+    | Manager
+    | Converter
+    | ProbabilityNode
+    | EndCondition
+    | UnlockGate
+    | ChoiceGroup
+    | Register
+    | Gate
+    | Queue
+    | TickspeedNode
+    | AutobuyerNode
+    | DrainNode
+    | BuffNode
+    | SynergyNode,
     Field(discriminator="type"),
 ]

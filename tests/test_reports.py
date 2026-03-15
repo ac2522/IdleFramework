@@ -1,4 +1,5 @@
 """Tests for the HTML report generator (Plotly)."""
+
 import json
 from pathlib import Path
 

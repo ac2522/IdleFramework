@@ -1,4 +1,5 @@
 """Tests for the beam search optimizer."""
+
 import json
 from pathlib import Path
 
@@ -16,12 +17,24 @@ def _make_two_gen_game():
         name="BeamTest",
         nodes=[
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "cheap", "type": "generator", "name": "Cheap",
-             "base_production": 1.0, "cost_base": 10.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
-            {"id": "expensive", "type": "generator", "name": "Expensive",
-             "base_production": 50.0, "cost_base": 500.0, "cost_growth_rate": 1.15,
-             "cycle_time": 1.0},
+            {
+                "id": "cheap",
+                "type": "generator",
+                "name": "Cheap",
+                "base_production": 1.0,
+                "cost_base": 10.0,
+                "cost_growth_rate": 1.15,
+                "cycle_time": 1.0,
+            },
+            {
+                "id": "expensive",
+                "type": "generator",
+                "name": "Expensive",
+                "base_production": 50.0,
+                "cost_base": 500.0,
+                "cost_growth_rate": 1.15,
+                "cycle_time": 1.0,
+            },
         ],
         edges=[
             {"id": "e1", "source": "cheap", "target": "cash", "edge_type": "production_target"},
@@ -37,12 +50,25 @@ def _make_multiplicative_trap_game():
         name="MultTrap",
         nodes=[
             {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-            {"id": "worker", "type": "generator", "name": "Worker",
-             "base_production": 1.0, "cost_base": 5.0, "cost_growth_rate": 1.05,
-             "cycle_time": 1.0},
-            {"id": "x10_all", "type": "upgrade", "name": "x10 All",
-             "upgrade_type": "multiplicative", "magnitude": 10.0, "cost": 500.0,
-             "target": "_all", "stacking_group": "mult"},
+            {
+                "id": "worker",
+                "type": "generator",
+                "name": "Worker",
+                "base_production": 1.0,
+                "cost_base": 5.0,
+                "cost_growth_rate": 1.05,
+                "cycle_time": 1.0,
+            },
+            {
+                "id": "x10_all",
+                "type": "upgrade",
+                "name": "x10 All",
+                "upgrade_type": "multiplicative",
+                "magnitude": 10.0,
+                "cost": 500.0,
+                "target": "_all",
+                "stacking_group": "mult",
+            },
         ],
         edges=[
             {"id": "e1", "source": "worker", "target": "cash", "edge_type": "production_target"},

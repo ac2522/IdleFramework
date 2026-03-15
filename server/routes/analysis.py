@@ -1,4 +1,5 @@
 """Analysis endpoints -- run, compare, report."""
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Response models
 # ---------------------------------------------------------------------------
+
 
 class PurchaseEntry(BaseModel):
     time: float
@@ -67,6 +69,7 @@ class CompareResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_game_or_404(game_id: str) -> GameDefinition:
     game = game_store.get_game(game_id)
     if game is None:
@@ -85,27 +88,25 @@ def _get_game_or_404(game_id: str) -> GameDefinition:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post("/run", response_model=AnalysisResponse)
 def run_analysis(req: AnalysisRequest):
-    """Run full analysis on a game definition.
-
-    NOTE/TODO: AnalysisRequest fields (optimizer, beam_width,
-    mcts_iterations, mcts_seed, bnb_depth, tags) are not yet
-    forwarded to run_full_analysis.
-    """
+    """Run full analysis on a game definition."""
     game = _get_game_or_404(req.game_id)
     try:
         report = run_full_analysis(
-            game, simulation_time=req.simulation_time
+            game,
+            simulation_time=req.simulation_time,
+            optimizer=req.optimizer,
+            beam_width=req.beam_width,
+            mcts_iterations=req.mcts_iterations,
+            mcts_seed=req.mcts_seed,
+            bnb_depth=req.bnb_depth,
         )
     except ValueError as exc:
-        raise HTTPException(
-            status_code=422, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception(
             "Unexpected error in /run for game %s",
@@ -149,17 +150,11 @@ def run_analysis(req: AnalysisRequest):
 def compare_strategies(req: CompareRequest):
     game = _get_game_or_404(req.game_id)
     try:
-        baseline = run_full_analysis(
-            game, simulation_time=req.simulation_time
-        )
+        baseline = run_full_analysis(game, simulation_time=req.simulation_time)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=422, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception(
             "Unexpected error in /compare baseline for game %s",
@@ -170,11 +165,7 @@ def compare_strategies(req: CompareRequest):
             detail="Internal analysis error",
         ) from exc
 
-    baseline_prod = (
-        baseline.optimizer_result.final_production
-        if baseline.optimizer_result
-        else 0
-    )
+    baseline_prod = baseline.optimizer_result.final_production if baseline.optimizer_result else 0
 
     variants: dict[str, VariantResult] = {}
     for tag in req.strategies:
@@ -196,11 +187,9 @@ def compare_strategies(req: CompareRequest):
             name=f"{game.name}_no_{tag}",
             nodes=filtered_nodes,
             edges=[
-                e for e in game.edges
-                if (
-                    e.source not in excluded_ids
-                    and e.target not in excluded_ids
-                )
+                e
+                for e in game.edges
+                if (e.source not in excluded_ids and e.target not in excluded_ids)
             ],
             stacking_groups=game.stacking_groups,
         )
@@ -210,17 +199,12 @@ def compare_strategies(req: CompareRequest):
                 simulation_time=req.simulation_time,
             )
         except ValueError as exc:
-            raise HTTPException(
-                status_code=422, detail=str(exc)
-            ) from exc
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail=str(exc)
-            ) from exc
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:
             logger.exception(
-                "Unexpected error in /compare variant '%s' "
-                "for game %s",
+                "Unexpected error in /compare variant '%s' for game %s",
                 tag,
                 req.game_id,
             )
@@ -234,11 +218,7 @@ def compare_strategies(req: CompareRequest):
             if variant_report.optimizer_result
             else 0
         )
-        ratio = (
-            variant_prod / baseline_prod
-            if baseline_prod > 0
-            else float("inf")
-        )
+        ratio = variant_prod / baseline_prod if baseline_prod > 0 else float("inf")
         variants[tag] = VariantResult(
             final_production=variant_prod,
             ratio_vs_baseline=ratio,
@@ -254,17 +234,11 @@ def compare_strategies(req: CompareRequest):
 def generate_html_report(req: ReportRequest):
     game = _get_game_or_404(req.game_id)
     try:
-        report = run_full_analysis(
-            game, simulation_time=req.simulation_time
-        )
+        report = run_full_analysis(game, simulation_time=req.simulation_time)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=422, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception(
             "Unexpected error in /report for game %s",

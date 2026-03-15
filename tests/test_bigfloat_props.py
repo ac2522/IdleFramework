@@ -34,6 +34,7 @@ def nonzero_bigfloats(draw):
 # Algebraic properties
 # ---------------------------------------------------------------------------
 
+
 class TestAlgebraicProperties:
     @given(a=bigfloats(), b=bigfloats())
     def test_addition_commutativity(self, a, b):
@@ -100,7 +101,7 @@ class TestAlgebraicProperties:
     @settings(max_examples=50)
     def test_pow_log_consistency(self, a):
         """log10(a^2) ≈ 2 * log10(a)."""
-        squared = a ** 2
+        squared = a**2
         log_sq = squared.log10()
         expected = 2.0 * a.log10()
         assert log_sq == pytest.approx(expected, rel=1e-10, abs=1e-9)

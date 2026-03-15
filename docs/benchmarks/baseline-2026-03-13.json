@@ -1,0 +1,78 @@
+[
+  {
+    "fixture": "MiniCap",
+    "horizon": 3600,
+    "engine_seconds": 0.2872,
+    "segments": 540
+  },
+  {
+    "fixture": "MiniCap",
+    "horizon": 3600,
+    "greedy_seconds": 0.0822,
+    "steps": 500
+  },
+  {
+    "fixture": "MiniCap",
+    "horizon": 36000,
+    "engine_seconds": 0.3192,
+    "segments": 612
+  },
+  {
+    "fixture": "MiniCap",
+    "horizon": 36000,
+    "greedy_seconds": 0.0823,
+    "steps": 500
+  },
+  {
+    "fixture": "MediumCap",
+    "horizon": 3600,
+    "engine_seconds": 1.3386,
+    "segments": 460
+  },
+  {
+    "fixture": "MediumCap",
+    "horizon": 3600,
+    "greedy_seconds": 0.1079,
+    "steps": -1,
+    "error": "Insufficient balance to purchase 'newspaper': need 6041.99, have 6041.99"
+  },
+  {
+    "fixture": "MediumCap",
+    "horizon": 36000,
+    "engine_seconds": 1.5018,
+    "segments": 525
+  },
+  {
+    "fixture": "MediumCap",
+    "horizon": 36000,
+    "greedy_seconds": 0.1075,
+    "steps": -1,
+    "error": "Insufficient balance to purchase 'newspaper': need 6041.99, have 6041.99"
+  },
+  {
+    "fixture": "LargeCap",
+    "horizon": 3600,
+    "engine_seconds": 24.0782,
+    "segments": 256
+  },
+  {
+    "fixture": "LargeCap",
+    "horizon": 3600,
+    "greedy_seconds": 0.8657,
+    "steps": -1,
+    "error": "Insufficient balance to purchase 'gen_1': need 7712.75, have 7712.75"
+  },
+  {
+    "fixture": "LargeCap",
+    "horizon": 36000,
+    "engine_seconds": 26.356,
+    "segments": 275
+  },
+  {
+    "fixture": "LargeCap",
+    "horizon": 36000,
+    "greedy_seconds": 0.8628,
+    "steps": -1,
+    "error": "Insufficient balance to purchase 'gen_1': need 7712.75, have 7712.75"
+  }
+]

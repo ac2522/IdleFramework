@@ -1,4 +1,5 @@
 """Unit tests for SessionManager."""
+
 from __future__ import annotations
 
 import time
@@ -13,6 +14,7 @@ from server.sessions import SessionManager
 def minicap_game():
     """Load the MiniCap GameDefinition."""
     from server.game_store import game_store
+
     game = game_store.get_game("minicap")
     assert game is not None
     return game

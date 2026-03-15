@@ -1,4 +1,5 @@
 """Game definition CRUD endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response
@@ -22,11 +23,14 @@ def list_games():
 def get_game(game_id: str):
     game = game_store.get_game(game_id)
     if game is None:
-        raise HTTPException(status_code=404, detail=ErrorResponse(
-            error="game_not_found",
-            detail=f"No game with ID '{game_id}' exists",
-            status=404,
-        ).model_dump())
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="game_not_found",
+                detail=f"No game with ID '{game_id}' exists",
+                status=404,
+            ).model_dump(),
+        )
     return game.model_dump(mode="json")
 
 
@@ -39,10 +43,7 @@ def create_game(game: GameDefinition):
             status_code=409,
             detail=ErrorResponse(
                 error="name_conflict",
-                detail=(
-                    f"Name '{game.name}' conflicts with"
-                    " a bundled game"
-                ),
+                detail=(f"Name '{game.name}' conflicts with a bundled game"),
                 status=409,
             ).model_dump(),
         ) from exc
@@ -52,17 +53,23 @@ def create_game(game: GameDefinition):
 @router.delete("/{game_id}", status_code=204)
 def delete_game(game_id: str):
     if game_store.is_bundled(game_id):
-        raise HTTPException(status_code=403, detail=ErrorResponse(
-            error="forbidden",
-            detail=f"Cannot delete bundled game '{game_id}'",
-            status=403,
-        ).model_dump())
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(
+                error="forbidden",
+                detail=f"Cannot delete bundled game '{game_id}'",
+                status=403,
+            ).model_dump(),
+        )
     if not game_store.delete_game(game_id):
-        raise HTTPException(status_code=404, detail=ErrorResponse(
-            error="game_not_found",
-            detail=f"No user game with ID '{game_id}' exists",
-            status=404,
-        ).model_dump())
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="game_not_found",
+                detail=f"No user game with ID '{game_id}' exists",
+                status=404,
+            ).model_dump(),
+        )
     return Response(status_code=204)
 
 
@@ -70,11 +77,14 @@ def delete_game(game_id: str):
 def get_schema(game_id: str):
     game = game_store.get_game(game_id)
     if game is None:
-        raise HTTPException(status_code=404, detail=ErrorResponse(
-            error="game_not_found",
-            detail=f"No game with ID '{game_id}' exists",
-            status=404,
-        ).model_dump())
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="game_not_found",
+                detail=f"No game with ID '{game_id}' exists",
+                status=404,
+            ).model_dump(),
+        )
     return GameDefinition.model_json_schema()
 
 
@@ -82,18 +92,24 @@ def get_schema(game_id: str):
 def export_game(game_id: str, format: str = "yaml"):
     game = game_store.get_game(game_id)
     if game is None:
-        raise HTTPException(status_code=404, detail=ErrorResponse(
-            error="game_not_found",
-            detail=f"No game with ID '{game_id}' exists",
-            status=404,
-        ).model_dump())
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                error="game_not_found",
+                detail=f"No game with ID '{game_id}' exists",
+                status=404,
+            ).model_dump(),
+        )
     if format == "yaml":
         return PlainTextResponse(to_yaml(game), media_type="text/yaml")
     elif format == "xml":
         return PlainTextResponse(to_xml(game), media_type="application/xml")
     else:
-        raise HTTPException(status_code=400, detail=ErrorResponse(
-            error="invalid_format",
-            detail=f"Unsupported format '{format}'. Use 'yaml' or 'xml'.",
-            status=400,
-        ).model_dump())
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="invalid_format",
+                detail=f"Unsupported format '{format}'. Use 'yaml' or 'xml'.",
+                status=400,
+            ).model_dump(),
+        )

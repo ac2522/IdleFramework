@@ -1,4 +1,5 @@
 """Export game definitions to YAML and XML formats."""
+
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET

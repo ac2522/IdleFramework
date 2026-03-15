@@ -26,3 +26,5 @@ class Edge(BaseModel):
     rate: float | None = None
     formula: str | None = None
     condition: str | None = None
+    target_property: str | None = None
+    modifier_mode: Literal["set", "add", "multiply"] | None = None

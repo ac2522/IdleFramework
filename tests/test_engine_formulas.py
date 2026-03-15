@@ -1,4 +1,5 @@
 """Tests for formula DSL integration and graph validation in the engine."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -17,8 +18,12 @@ class TestGraphValidationOnInit:
                     {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
                 ],
                 edges=[
-                    {"id": "e1", "source": "ghost", "target": "cash",
-                     "edge_type": "production_target"},
+                    {
+                        "id": "e1",
+                        "source": "ghost",
+                        "target": "cash",
+                        "edge_type": "production_target",
+                    },
                 ],
                 stacking_groups={},
             )
@@ -28,18 +33,24 @@ class TestGraphValidationOnInit:
             schema_version="1.0",
             name="CyclicDeps",
             nodes=[
-                {"id": "a", "type": "unlock_gate", "name": "A",
-                 "targets": [{"node_id": "b", "property": "owned", "threshold": 1}],
-                 "prerequisites": []},
-                {"id": "b", "type": "unlock_gate", "name": "B",
-                 "targets": [{"node_id": "a", "property": "owned", "threshold": 1}],
-                 "prerequisites": []},
+                {
+                    "id": "a",
+                    "type": "unlock_gate",
+                    "name": "A",
+                    "targets": [{"node_id": "b", "property": "owned", "threshold": 1}],
+                    "prerequisites": [],
+                },
+                {
+                    "id": "b",
+                    "type": "unlock_gate",
+                    "name": "B",
+                    "targets": [{"node_id": "a", "property": "owned", "threshold": 1}],
+                    "prerequisites": [],
+                },
             ],
             edges=[
-                {"id": "e1", "source": "a", "target": "b",
-                 "edge_type": "unlock_dependency"},
-                {"id": "e2", "source": "b", "target": "a",
-                 "edge_type": "unlock_dependency"},
+                {"id": "e1", "source": "a", "target": "b", "edge_type": "unlock_dependency"},
+                {"id": "e2", "source": "b", "target": "a", "edge_type": "unlock_dependency"},
             ],
             stacking_groups={},
         )
@@ -53,13 +64,18 @@ class TestGraphValidationOnInit:
             name="Good",
             nodes=[
                 {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-                {"id": "miner", "type": "generator", "name": "Miner",
-                 "base_production": 1.0, "cost_base": 10.0,
-                 "cost_growth_rate": 1.15, "cycle_time": 1.0},
+                {
+                    "id": "miner",
+                    "type": "generator",
+                    "name": "Miner",
+                    "base_production": 1.0,
+                    "cost_base": 10.0,
+                    "cost_growth_rate": 1.15,
+                    "cycle_time": 1.0,
+                },
             ],
             edges=[
-                {"id": "e1", "source": "miner", "target": "cash",
-                 "edge_type": "production_target"},
+                {"id": "e1", "source": "miner", "target": "cash", "edge_type": "production_target"},
             ],
             stacking_groups={},
         )
@@ -74,19 +90,27 @@ class TestPrestigeFormulaEvaluation:
             name="PrestigeTest",
             nodes=[
                 {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-                {"id": "miner", "type": "generator", "name": "Miner",
-                 "base_production": 1.0, "cost_base": 10.0,
-                 "cost_growth_rate": 1.15, "cycle_time": 1.0},
-                {"id": "prestige", "type": "prestige_layer",
-                 "name": "Angels",
-                 "formula_expr": "150 * sqrt(lifetime_earnings / 1e15)",
-                 "layer_index": 0,
-                 "reset_scope": ["cash", "miner"],
-                 "bonus_type": "multiplicative"},
+                {
+                    "id": "miner",
+                    "type": "generator",
+                    "name": "Miner",
+                    "base_production": 1.0,
+                    "cost_base": 10.0,
+                    "cost_growth_rate": 1.15,
+                    "cycle_time": 1.0,
+                },
+                {
+                    "id": "prestige",
+                    "type": "prestige_layer",
+                    "name": "Angels",
+                    "formula_expr": "150 * sqrt(lifetime_earnings / 1e15)",
+                    "layer_index": 0,
+                    "reset_scope": ["cash", "miner"],
+                    "bonus_type": "multiplicative",
+                },
             ],
             edges=[
-                {"id": "e1", "source": "miner", "target": "cash",
-                 "edge_type": "production_target"},
+                {"id": "e1", "source": "miner", "target": "cash", "edge_type": "production_target"},
             ],
             stacking_groups={},
         )
@@ -102,12 +126,15 @@ class TestPrestigeFormulaEvaluation:
             name="PrestigeZero",
             nodes=[
                 {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-                {"id": "prestige", "type": "prestige_layer",
-                 "name": "Angels",
-                 "formula_expr": "150 * sqrt(lifetime_earnings / 1e15)",
-                 "layer_index": 0,
-                 "reset_scope": ["cash"],
-                 "bonus_type": "multiplicative"},
+                {
+                    "id": "prestige",
+                    "type": "prestige_layer",
+                    "name": "Angels",
+                    "formula_expr": "150 * sqrt(lifetime_earnings / 1e15)",
+                    "layer_index": 0,
+                    "reset_scope": ["cash"],
+                    "bonus_type": "multiplicative",
+                },
             ],
             edges=[],
             stacking_groups={},
@@ -124,9 +151,13 @@ class TestRegisterFormulaEvaluation:
             name="RegisterTest",
             nodes=[
                 {"id": "cash", "type": "resource", "name": "Cash", "initial_value": 0},
-                {"id": "calc", "type": "register", "name": "Bonus Calc",
-                 "formula_expr": "x * 0.02 + 1",
-                 "input_labels": [{"name": "x", "description": "input value"}]},
+                {
+                    "id": "calc",
+                    "type": "register",
+                    "name": "Bonus Calc",
+                    "formula_expr": "x * 0.02 + 1",
+                    "input_labels": [{"name": "x", "description": "input value"}],
+                },
             ],
             edges=[],
             stacking_groups={},

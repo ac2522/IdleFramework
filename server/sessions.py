@@ -1,4 +1,5 @@
 """In-memory engine session manager."""
+
 from __future__ import annotations
 
 import logging
@@ -59,15 +60,15 @@ class SessionManager:
                     cost = bulk_cost(
                         engine._generators[gen_id].cost_base,
                         engine._generators[gen_id].cost_growth_rate,
-                        0, 1,
+                        0,
+                        1,
                     )
                     if cost <= initial_balance:
                         engine.purchase(gen_id, 1)
                         break
             except Exception:
                 logger.warning(
-                    "Auto-purchase failed during"
-                    " session creation",
+                    "Auto-purchase failed during session creation",
                     exc_info=True,
                 )
 

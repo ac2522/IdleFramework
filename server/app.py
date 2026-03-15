@@ -1,4 +1,5 @@
 """FastAPI application -- serves API + static frontend."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -43,4 +44,5 @@ app.include_router(engine.router, prefix="/api/v1/engine", tags=["engine"])
 _static_dir = Path(__file__).parent.parent / "frontend" / "dist"
 if _static_dir.is_dir():
     from fastapi.staticfiles import StaticFiles
+
     app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="frontend")

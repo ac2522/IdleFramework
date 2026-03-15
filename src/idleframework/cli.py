@@ -1,4 +1,5 @@
 """IdleFramework CLI — validate, analyze, report, compare, export."""
+
 from __future__ import annotations
 
 import html
@@ -66,8 +67,10 @@ def analyze(game_file: str, time: float = 300.0) -> None:
         typer.echo(f"  - {pw['reason']}")
 
     if report.dominant_strategy and report.dominant_strategy.get("dominant_gen"):
-        typer.echo(f"\nDominant strategy: {report.dominant_strategy['dominant_gen']} "
-                   f"(ratio: {report.dominant_strategy['ratio']:.1f}x)")
+        typer.echo(
+            f"\nDominant strategy: {report.dominant_strategy['dominant_gen']} "
+            f"(ratio: {report.dominant_strategy['ratio']:.1f}x)"
+        )
     else:
         typer.echo("\nNo dominant strategy detected.")
 
@@ -121,8 +124,7 @@ def _generate_html_report(report, cdn: bool = True) -> str:
     dead_html = ""
     if report.dead_upgrades:
         items = "".join(
-            f"<li>{html.escape(str(d['upgrade_id']))}: "
-            f"{html.escape(str(d['reason']))}</li>"
+            f"<li>{html.escape(str(d['upgrade_id']))}: {html.escape(str(d['reason']))}</li>"
             for d in report.dead_upgrades
         )
         dead_html = f"<h2>Dead Upgrades</h2><ul>{items}</ul>"
@@ -130,8 +132,7 @@ def _generate_html_report(report, cdn: bool = True) -> str:
     walls_html = ""
     if report.progression_walls:
         items = "".join(
-            f"<li>{html.escape(str(w['reason']))}</li>"
-            for w in report.progression_walls
+            f"<li>{html.escape(str(w['reason']))}</li>" for w in report.progression_walls
         )
         walls_html = f"<h2>Progression Walls</h2><ul>{items}</ul>"
 
@@ -226,8 +227,7 @@ def _exclude_tag(game: GameDefinition, tag: str) -> GameDefinition:
 
     game_copy.nodes = filtered_nodes
     game_copy.edges = [
-        e for e in game_copy.edges
-        if e.source not in excluded_ids and e.target not in excluded_ids
+        e for e in game_copy.edges if e.source not in excluded_ids and e.target not in excluded_ids
     ]
 
     return game_copy

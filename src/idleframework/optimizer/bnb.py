@@ -3,6 +3,7 @@
 Uses DFS with pruning: if the current best production exceeds a node's
 upper bound, that branch is pruned.
 """
+
 from __future__ import annotations
 
 import copy

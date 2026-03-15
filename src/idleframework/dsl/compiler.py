@@ -13,32 +13,35 @@ from idleframework.dsl.parser import parse_formula as _parse
 _MAX_DEPTH = 50
 
 # AST node whitelist — only these node types are permitted in compiled formulas
-_ALLOWED_AST_NODES = frozenset({
-    ast.Expression,
-    ast.BinOp,
-    ast.UnaryOp,
-    ast.Call,
-    ast.Name,
-    ast.Constant,
-    ast.Compare,
-    ast.IfExp,
-    ast.Load,
-    # Operators
-    ast.Add,
-    ast.Sub,
-    ast.Mult,
-    ast.Div,
-    ast.Mod,
-    ast.Pow,
-    ast.USub,
-    # Comparisons
-    ast.Gt,
-    ast.GtE,
-    ast.Lt,
-    ast.LtE,
-    ast.Eq,
-    ast.NotEq,
-})
+_ALLOWED_AST_NODES = frozenset(
+    {
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Call,
+        ast.Name,
+        ast.Constant,
+        ast.Compare,
+        ast.IfExp,
+        ast.Load,
+        # Operators
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.Mod,
+        ast.Pow,
+        ast.USub,
+        # Comparisons
+        ast.Gt,
+        ast.GtE,
+        ast.Lt,
+        ast.LtE,
+        ast.Eq,
+        ast.NotEq,
+    }
+)
+
 
 def _to_float(x: Any) -> float:
     """Coerce BigFloat to float for math functions, pass through plain numbers."""
@@ -51,13 +54,9 @@ def _bf_sqrt(x: Any) -> Any:
         # sqrt(m * 10^e) = sqrt(m) * 10^(e/2)
         # For odd exponents: sqrt(m * 10) * 10^((e-1)/2)
         if x.exponent % 2 == 0:
-            return BigFloat.from_components(
-                math.sqrt(x.mantissa), x.exponent // 2
-            )
+            return BigFloat.from_components(math.sqrt(x.mantissa), x.exponent // 2)
         else:
-            return BigFloat.from_components(
-                math.sqrt(x.mantissa * 10.0), (x.exponent - 1) // 2
-            )
+            return BigFloat.from_components(math.sqrt(x.mantissa * 10.0), (x.exponent - 1) // 2)
     return math.sqrt(x)
 
 
@@ -118,8 +117,7 @@ def _validate_whitelist(node: ast.AST) -> None:
     """Walk AST and reject any node type not in the whitelist."""
     if type(node) not in _ALLOWED_AST_NODES:
         raise ValueError(
-            f"Disallowed AST node: {type(node).__name__}. "
-            f"Only whitelisted nodes are permitted."
+            f"Disallowed AST node: {type(node).__name__}. Only whitelisted nodes are permitted."
         )
     for child in ast.iter_child_nodes(node):
         _validate_whitelist(child)

@@ -11,14 +11,11 @@ class TestListGames:
         assert "minicap" in ids
 
     def test_list_includes_name_and_node_count(
-        self, client,
+        self,
+        client,
     ):
         resp = client.get("/api/v1/games/")
-        game = next(
-            g
-            for g in resp.json()["games"]
-            if g["id"] == "minicap"
-        )
+        game = next(g for g in resp.json()["games"] if g["id"] == "minicap")
         assert game["name"] == "MiniCap"
         assert game["node_count"] > 0
 
@@ -64,7 +61,8 @@ class TestCreateGame:
             "stacking_groups": {},
         }
         resp = client.post(
-            "/api/v1/games/", json=game_json,
+            "/api/v1/games/",
+            json=game_json,
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -73,14 +71,16 @@ class TestCreateGame:
 
     def test_create_invalid_game_422(self, client):
         resp = client.post(
-            "/api/v1/games/", json={"bad": "data"},
+            "/api/v1/games/",
+            json={"bad": "data"},
         )
         assert resp.status_code == 422
 
 
 class TestCreateGameShadowsBundled:
     def test_create_minicap_name_conflict_409(
-        self, client,
+        self,
+        client,
     ):
         """Creating a game named MiniCap conflicts."""
         game_json = {
@@ -91,7 +91,8 @@ class TestCreateGameShadowsBundled:
             "stacking_groups": {},
         }
         resp = client.post(
-            "/api/v1/games/", json=game_json,
+            "/api/v1/games/",
+            json=game_json,
         )
         assert resp.status_code == 409
         detail = resp.json()["detail"]

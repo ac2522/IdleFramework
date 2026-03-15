@@ -13,14 +13,9 @@ interface PaletteCategory {
 
 const PALETTE_CATEGORIES: PaletteCategory[] = [
   {
-    label: 'Resources',
+    label: 'Flow',
     items: [
       { type: 'resource', name: 'Resource', description: 'Stores a numeric value' },
-    ],
-  },
-  {
-    label: 'Producers',
-    items: [
       { type: 'generator', name: 'Generator', description: 'Produces resources over time' },
       { type: 'nested_generator', name: 'Nested Gen', description: 'Generates other generators' },
       { type: 'converter', name: 'Converter', description: 'Converts inputs to outputs' },
@@ -30,32 +25,37 @@ const PALETTE_CATEGORIES: PaletteCategory[] = [
     label: 'Modifiers',
     items: [
       { type: 'upgrade', name: 'Upgrade', description: 'Multiplies or adds to production' },
-      { type: 'manager', name: 'Manager', description: 'Automates collection or buying' },
-    ],
-  },
-  {
-    label: 'Meta',
-    items: [
-      { type: 'prestige_layer', name: 'Prestige', description: 'Reset layer with bonus' },
-      { type: 'sacrifice', name: 'Sacrifice', description: 'Trade resources for bonuses' },
-      { type: 'achievement', name: 'Achievement', description: 'Conditional milestone reward' },
-      { type: 'end_condition', name: 'End Condition', description: 'Win/lose condition check' },
-    ],
-  },
-  {
-    label: 'Control',
-    items: [
-      { type: 'unlock_gate', name: 'Unlock Gate', description: 'Unlocks content on condition' },
-      { type: 'gate', name: 'Gate', description: 'Routes flow deterministically' },
-      { type: 'choice_group', name: 'Choice Group', description: 'Player picks from options' },
+      { type: 'buff', name: 'Buff', description: 'Timed or proc-based multiplier' },
+      { type: 'synergy', name: 'Synergy', description: 'Cross-resource bonus formula' },
+      { type: 'drain', name: 'Drain', description: 'Consumes resources over time' },
       { type: 'probability', name: 'Probability', description: 'Random outcome distribution' },
     ],
   },
   {
-    label: 'Advanced',
+    label: 'Automation',
+    items: [
+      { type: 'manager', name: 'Manager', description: 'Automates collection or buying' },
+      { type: 'autobuyer', name: 'Autobuyer', description: 'Auto-purchases with priority' },
+      { type: 'tickspeed', name: 'Tickspeed', description: 'Controls game tick rate' },
+    ],
+  },
+  {
+    label: 'Progression',
+    items: [
+      { type: 'prestige_layer', name: 'Prestige', description: 'Reset layer with bonus' },
+      { type: 'unlock_gate', name: 'Unlock Gate', description: 'Unlocks content on condition' },
+      { type: 'achievement', name: 'Achievement', description: 'Conditional milestone reward' },
+      { type: 'sacrifice', name: 'Sacrifice', description: 'Trade resources for bonuses' },
+    ],
+  },
+  {
+    label: 'Logic',
     items: [
       { type: 'register', name: 'Register', description: 'Computes a formula value' },
+      { type: 'gate', name: 'Gate', description: 'Routes flow deterministically' },
       { type: 'queue', name: 'Queue', description: 'Delays flow with capacity' },
+      { type: 'choice_group', name: 'Choice Group', description: 'Player picks from options' },
+      { type: 'end_condition', name: 'End Condition', description: 'Win/lose condition check' },
     ],
   },
 ]

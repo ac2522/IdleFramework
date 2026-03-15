@@ -1,4 +1,5 @@
 """Interactive engine session endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response
@@ -45,9 +46,7 @@ def _get_session_or_404(
             status_code=404,
             detail=ErrorResponse(
                 error="session_not_found",
-                detail=(
-                    f"No session with ID '{session_id}' exists"
-                ),
+                detail=(f"No session with ID '{session_id}' exists"),
                 status=404,
             ).model_dump(),
         )
@@ -62,9 +61,7 @@ def _build_state(
     game = session.game
     rates = engine.compute_production_rates()
     primary = engine._get_primary_resource_id()
-    balance = (
-        engine.get_balance(primary) if primary else 0.0
-    )
+    balance = engine.get_balance(primary) if primary else 0.0
 
     resources: dict[str, ResourceState] = {}
     generators: dict[str, GeneratorState] = {}
@@ -76,15 +73,9 @@ def _build_state(
         if ns is None:
             continue
         if isinstance(node, Generator):
-            gen_mult = (
-                engine._compute_generator_multipliers()
-                .get(node.id, 1.0)
-            )
+            gen_mult = engine._compute_generator_multipliers().get(node.id, 1.0)
             prod = (
-                node.base_production
-                * ns.owned
-                / node.cycle_time
-                * gen_mult
+                node.base_production * ns.owned / node.cycle_time * gen_mult
                 if ns.owned > 0
                 else 0.0
             )
@@ -103,10 +94,7 @@ def _build_state(
             upgrades[node.id] = UpgradeState(
                 purchased=ns.purchased,
                 cost=node.cost,
-                affordable=(
-                    balance >= node.cost
-                    and not ns.purchased
-                ),
+                affordable=(balance >= node.cost and not ns.purchased),
             )
         elif isinstance(node, Resource):
             resources[node.id] = ResourceState(
@@ -114,17 +102,24 @@ def _build_state(
                 production_rate=rates.get(node.id, 0.0),
             )
         elif isinstance(node, Achievement):
-            achievements.append(AchievementState(
-                id=node.id,
-                name=node.name,
-                unlocked=ns.purchased,
-            ))
+            achievements.append(
+                AchievementState(
+                    id=node.id,
+                    name=node.name,
+                    unlocked=ns.purchased,
+                )
+            )
 
     prestige = None
     for node in game.nodes:
         if isinstance(node, PrestigeLayer):
+            currency_value = 0.0
+            if node.currency_id:
+                currency_ns = engine.state.get(node.currency_id)
+                if currency_ns is not None:
+                    currency_value = currency_ns.current_value
             prestige = PrestigeState(
-                available_currency=0.0,
+                available_currency=currency_value,
                 formula_preview=node.formula_expr,
             )
             break
@@ -149,15 +144,14 @@ def start_session(req: StartSessionRequest):
             status_code=404,
             detail=ErrorResponse(
                 error="game_not_found",
-                detail=(
-                    f"No game with ID"
-                    f" '{req.game_id}' exists"
-                ),
+                detail=(f"No game with ID '{req.game_id}' exists"),
                 status=404,
             ).model_dump(),
         )
     session = session_manager.create(
-        req.game_id, game, req.initial_balance,
+        req.game_id,
+        game,
+        req.initial_balance,
     )
     return _build_state(session)
 
@@ -199,9 +193,7 @@ def purchase(session_id: str, req: PurchaseRequest):
             status_code=400,
             detail=ErrorResponse(
                 error="invalid_purchase",
-                detail=(
-                    f"Node '{req.node_id}' is not purchasable"
-                ),
+                detail=(f"Node '{req.node_id}' is not purchasable"),
                 status=400,
             ).model_dump(),
         )
@@ -217,21 +209,13 @@ def purchase(session_id: str, req: PurchaseRequest):
                 req.count,
             )
             primary = engine._get_primary_resource_id()
-            bal = (
-                engine.get_balance(primary)
-                if primary
-                else 0.0
-            )
+            bal = engine.get_balance(primary) if primary else 0.0
             if bal < float(total_cost):
                 raise HTTPException(
                     status_code=400,
                     detail=ErrorResponse(
                         error="insufficient_funds",
-                        detail=(
-                            f"Need {float(total_cost):.2f}"
-                            f" but only have"
-                            f" {bal:.2f}"
-                        ),
+                        detail=(f"Need {float(total_cost):.2f} but only have {bal:.2f}"),
                         status=400,
                     ).model_dump(),
                 )
@@ -272,17 +256,20 @@ def prestige_session(session_id: str):
             ).model_dump(),
         )
 
-    raise HTTPException(
-        status_code=501,
-        detail=ErrorResponse(
-            error="not_implemented",
-            detail=(
-                "Prestige currency application"
-                " is not yet implemented"
-            ),
-            status=501,
-        ).model_dump(),
-    )
+    engine = session.engine
+    try:
+        engine.execute_prestige(prestige_node.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error="prestige_failed",
+                detail=str(exc),
+                status=400,
+            ).model_dump(),
+        ) from exc
+
+    return _build_state(session)
 
 
 @router.post(
@@ -300,8 +287,10 @@ def auto_optimize(
             from idleframework.optimizer.beam import (
                 BeamSearchOptimizer,
             )
+
             engine_copy = PiecewiseEngine(
-                session.game, session.engine.state,
+                session.game,
+                session.engine.state,
             )
             optimizer = BeamSearchOptimizer(
                 engine_copy,
@@ -311,8 +300,10 @@ def auto_optimize(
             from idleframework.optimizer.mcts import (
                 MCTSOptimizer,
             )
+
             engine_copy = PiecewiseEngine(
-                session.game, session.engine.state,
+                session.game,
+                session.engine.state,
             )
             optimizer = MCTSOptimizer(
                 engine_copy,
@@ -322,8 +313,10 @@ def auto_optimize(
             from idleframework.optimizer.bnb import (
                 BranchAndBoundOptimizer,
             )
+
             engine_copy = PiecewiseEngine(
-                session.game, session.engine.state,
+                session.game,
+                session.engine.state,
             )
             optimizer = BranchAndBoundOptimizer(
                 engine_copy,
@@ -331,7 +324,8 @@ def auto_optimize(
             )
         else:
             optimizer = GreedyOptimizer(
-                session.game, session.engine.state,
+                session.game,
+                session.engine.state,
             )
 
         result = optimizer.optimize(
@@ -380,10 +374,7 @@ def delete_session(session_id: str):
             status_code=404,
             detail=ErrorResponse(
                 error="session_not_found",
-                detail=(
-                    f"No session with ID"
-                    f" '{session_id}' exists"
-                ),
+                detail=(f"No session with ID '{session_id}' exists"),
                 status=404,
             ).model_dump(),
         )
