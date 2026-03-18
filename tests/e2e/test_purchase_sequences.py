@@ -7,7 +7,7 @@ but scanner produces 'data'. Use the correct resource for purchases.
 import pytest
 
 from idleframework.engine.segments import PiecewiseEngine
-from idleframework.model.nodes import Generator, Resource
+from idleframework.model.nodes import Resource
 
 from .conftest import (
     PHASE_B_FIXTURES,

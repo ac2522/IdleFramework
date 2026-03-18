@@ -14,8 +14,8 @@ from idleframework.engine.segments import PiecewiseEngine
 from idleframework.model.nodes import Resource
 
 from .conftest import (
-    PHASE_B_FIXTURES,
     NON_MONOTONIC_FIXTURES,
+    PHASE_B_FIXTURES,
     find_first_generator,
     find_primary_resource,
     load_e2e_game,
@@ -24,8 +24,6 @@ from .conftest import (
 
 def _find_currency_resource(game):
     """Find the resource used as currency (for purchasing generators)."""
-    from idleframework.model.nodes import Generator
-
     gen_targets = set()
     for edge in game.edges:
         if edge.edge_type == "production_target":

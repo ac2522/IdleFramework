@@ -8,7 +8,6 @@ from idleframework.engine.segments import PiecewiseEngine
 from idleframework.optimizer.greedy import GreedyOptimizer
 
 from .conftest import (
-    PHASE_B_FIXTURES,
     SINGLE_RESOURCE_FIXTURES,
     find_primary_resource,
     load_e2e_game,

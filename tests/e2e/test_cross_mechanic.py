@@ -2,8 +2,6 @@
 
 import pytest
 
-from idleframework.model.nodes import Resource
-
 
 class TestSynergyInteractions:
     """PrestigeTower: synergy stacking."""
