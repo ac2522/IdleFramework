@@ -1,0 +1,148 @@
+{
+    "schema_version": "1.0",
+    "name": "FullKitchen",
+    "description": "Kitchen-sink game exercising all 21 node types, all 8 edge types, all 3 stacking modes, and all modifier modes.",
+    "stacking_groups": {
+        "mult_grp": "multiplicative",
+        "add_grp": "additive",
+        "pct_grp": "percentage",
+        "milestones": "multiplicative",
+        "tick_grp": "multiplicative"
+    },
+    "nodes": [
+        {"id": "gold", "type": "resource", "name": "Gold", "initial_value": 200.0},
+        {"id": "gems", "type": "resource", "name": "Gems",
+         "initial_value": 0.0, "capacity": 1000.0, "overflow_behavior": "clamp"},
+        {"id": "mana", "type": "resource", "name": "Mana",
+         "initial_value": 50.0, "capacity": 500.0, "overflow_behavior": "waste"},
+        {"id": "prestige_pts", "type": "resource", "name": "Prestige Points", "initial_value": 0.0},
+        {"id": "sacrifice_pts", "type": "resource", "name": "Sacrifice Points", "initial_value": 0.0},
+
+        {"id": "miner", "type": "generator", "name": "Miner",
+         "base_production": 2.0, "cost_base": 15.0, "cost_growth_rate": 1.1, "cycle_time": 1.0},
+        {"id": "wizard", "type": "generator", "name": "Wizard",
+         "base_production": 5.0, "cost_base": 100.0, "cost_growth_rate": 1.15, "cycle_time": 2.0},
+        {"id": "alchemist", "type": "generator", "name": "Alchemist",
+         "base_production": 1.0, "cost_base": 200.0, "cost_growth_rate": 1.12, "cycle_time": 1.0},
+
+        {"id": "nested_miner", "type": "nested_generator", "name": "Miner Factory",
+         "target_generator": "miner", "production_rate": 0.2,
+         "cost_base": 2000.0, "cost_growth_rate": 1.2},
+
+        {"id": "forge", "type": "converter", "name": "Forge",
+         "inputs": [{"resource": "gold", "amount": 5.0}],
+         "outputs": [{"resource": "gems", "amount": 1.0}],
+         "recipe_type": "fixed"},
+
+        {"id": "upg_x2_miner", "type": "upgrade", "name": "x2 Miner",
+         "upgrade_type": "multiplicative", "magnitude": 2.0, "cost": 300.0,
+         "target": "miner", "stacking_group": "mult_grp"},
+        {"id": "upg_x3_all", "type": "upgrade", "name": "x3 All",
+         "upgrade_type": "multiplicative", "magnitude": 3.0, "cost": 5000.0,
+         "target": "_all", "stacking_group": "mult_grp"},
+        {"id": "upg_plus5_wizard", "type": "upgrade", "name": "+5 Wizard",
+         "upgrade_type": "additive", "magnitude": 5.0, "cost": 1000.0,
+         "target": "wizard", "stacking_group": "add_grp"},
+        {"id": "upg_pct50_alch", "type": "upgrade", "name": "+50% Alchemist",
+         "upgrade_type": "percentage", "magnitude": 50.0, "cost": 2000.0,
+         "target": "alchemist", "stacking_group": "pct_grp"},
+        {"id": "upg_tick_x2", "type": "upgrade", "name": "x2 Tickspeed",
+         "upgrade_type": "multiplicative", "magnitude": 2.0, "cost": 5000.0,
+         "target": "tickspeed_node", "stacking_group": "tick_grp"},
+
+        {"id": "path_a_speed", "type": "upgrade", "name": "Speed Path",
+         "upgrade_type": "multiplicative", "magnitude": 2.0, "cost": 3000.0,
+         "target": "tickspeed_node", "stacking_group": "tick_grp"},
+        {"id": "path_b_power", "type": "upgrade", "name": "Power Path",
+         "upgrade_type": "multiplicative", "magnitude": 4.0, "cost": 3000.0,
+         "target": "_all", "stacking_group": "mult_grp"},
+
+        {"id": "prestige_layer", "type": "prestige_layer", "name": "Prestige",
+         "formula_expr": "floor(sqrt(lifetime_gold))",
+         "layer_index": 0,
+         "currency_id": "prestige_pts",
+         "reset_scope": ["gold", "gems", "miner", "wizard", "alchemist",
+                         "nested_miner", "upg_x2_miner", "upg_x3_all",
+                         "upg_plus5_wizard", "upg_pct50_alch"],
+         "persistence_scope": ["prestige_pts", "sacrifice_pts", "mana"],
+         "bonus_type": "multiplicative"},
+
+        {"id": "sacrifice_node", "type": "sacrifice", "name": "Sacrifice",
+         "formula_expr": "floor(lifetime_gold * 0.001)",
+         "reset_scope": ["gold", "miner", "wizard"],
+         "bonus_type": "additive"},
+
+        {"id": "ach_25_miners", "type": "achievement", "name": "25 Miners",
+         "condition_type": "single_threshold",
+         "targets": [{"node_id": "miner", "property": "owned", "threshold": 25}],
+         "bonus": {"type": "multiplicative", "magnitude": 2.0, "target": "miner", "stacking_group": "milestones"},
+         "permanent": true},
+
+        {"id": "manager_miner", "type": "manager", "name": "Miner Manager",
+         "target": "miner", "automation_type": "collect"},
+
+        {"id": "crit_node", "type": "probability", "name": "Miner Crit",
+         "expected_value": 1.0, "crit_chance": 0.15, "crit_multiplier": 2.5},
+
+        {"id": "end_cond", "type": "end_condition", "name": "Victory",
+         "condition_type": "multi_threshold",
+         "targets": [
+             {"node_id": "gold", "property": "current_value", "threshold": 1000000000.0},
+             {"node_id": "gems", "property": "current_value", "threshold": 500.0}
+         ],
+         "logic": "and"},
+
+        {"id": "gem_gate", "type": "unlock_gate", "name": "Unlock Forge",
+         "condition_type": "single_threshold",
+         "targets": [{"node_id": "gold", "property": "current_value", "threshold": 5000.0}],
+         "prerequisites": ["miner"]},
+
+        {"id": "choice_grp", "type": "choice_group", "name": "Speed vs Power",
+         "options": ["path_a_speed", "path_b_power"], "max_selections": 1},
+
+        {"id": "calc_reg", "type": "register", "name": "Power Calculator",
+         "formula_expr": "owned_miner * 2 + owned_wizard * 5",
+         "input_labels": [{"miner": "Miner count"}, {"wizard": "Wizard count"}]},
+
+        {"id": "flow_gate", "type": "gate", "name": "Gold Splitter",
+         "mode": "deterministic", "weights": [2.0, 1.0]},
+
+        {"id": "mana_queue", "type": "queue", "name": "Mana Queue",
+         "delay": 5.0, "capacity": 50},
+
+        {"id": "tickspeed_node", "type": "tickspeed", "name": "Tickspeed"},
+
+        {"id": "auto_miner", "type": "autobuyer", "name": "Auto Miner",
+         "target": "miner", "interval": 8.0, "bulk_amount": "1"},
+
+        {"id": "gold_drain", "type": "drain", "name": "Gold Tax",
+         "rate": 1.5, "condition": "balance_gold > 3000"},
+
+        {"id": "frenzy_buff", "type": "buff", "name": "Frenzy",
+         "buff_type": "timed", "duration": 10.0, "multiplier": 3.0,
+         "cooldown": 40.0, "target": "miner"},
+
+        {"id": "syn_miner_wizard", "type": "synergy", "name": "Miner-Wizard Synergy",
+         "sources": ["miner"], "formula_expr": "owned_miner * 0.01", "target": "wizard"}
+    ],
+    "edges": [
+        {"id": "e_miner_gold", "source": "miner", "target": "gold", "edge_type": "production_target"},
+        {"id": "e_wizard_gold", "source": "wizard", "target": "gold", "edge_type": "production_target"},
+        {"id": "e_alch_mana", "source": "alchemist", "target": "mana", "edge_type": "production_target"},
+        {"id": "e_nested_miner", "source": "nested_miner", "target": "miner", "edge_type": "production_target"},
+        {"id": "e_drain_gold", "source": "gold_drain", "target": "gold", "edge_type": "consumption"},
+        {"id": "e_flow_gold", "source": "flow_gate", "target": "gold", "edge_type": "resource_flow"},
+        {"id": "e_flow_gems", "source": "flow_gate", "target": "gems", "edge_type": "resource_flow"},
+        {"id": "e_queue_mana", "source": "mana_queue", "target": "mana", "edge_type": "resource_flow"},
+        {"id": "e_crit_miner", "source": "crit_node", "target": "miner", "edge_type": "state_modifier",
+         "formula": "1 + 0.15 * (2.5 - 1)",
+         "target_property": "base_production", "modifier_mode": "multiply"},
+        {"id": "e_prestige_boost", "source": "prestige_layer", "target": "miner", "edge_type": "state_modifier",
+         "formula": "owned_prestige_pts * 0.5",
+         "target_property": "base_production", "modifier_mode": "add"},
+        {"id": "e_gate_unlock", "source": "gem_gate", "target": "forge", "edge_type": "activator"},
+        {"id": "e_sacrifice_trigger", "source": "sacrifice_node", "target": "prestige_layer", "edge_type": "trigger"},
+        {"id": "e_gate_dep", "source": "gem_gate", "target": "wizard", "edge_type": "unlock_dependency"},
+        {"id": "e_upg_target", "source": "upg_x2_miner", "target": "miner", "edge_type": "upgrade_target"}
+    ]
+}
